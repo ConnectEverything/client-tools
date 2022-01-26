@@ -1,4 +1,6 @@
 #!/bin/sh
+# shellcheck disable=SC3043
+
 set -eu
 
 # Copyright 2020-2022 The NATS Authors
@@ -33,6 +35,16 @@ set -eu
 # parsing it for channel updates.
 #
 # We require various tools mandated by POSIX, such as `uname`, `sed`, etc.
+
+# Shellcheck:
+#   SC3043: we use `local`.  It's a known portability limitation but it's sane.
+#   SC2064: we are deliberately expanding the trap string at set time
+#
+# Based on knowledge that we won't put non-ASCII, quotes,
+# or internal whitespace into our channel files, we'll use:
+#   SC2018/SC2019: we're using ASCII for our artifacts and OS/arch names
+#   SC2086: we're using space-delimited arrays-in-strings, not ksh-ish arrays
+#           (oh how we wish general shell arrays could be assumed available)
 
 readonly CHANNELS_URL=FIXME
 readonly NIGHTLY_URL=FIXME
@@ -151,10 +163,12 @@ check_have_external_commands() {
 
 normalized_ostype() {
   local ostype
+  # We only need to worry about ASCII here
   if [ -n "${opt_ostype:-}" ]; then
+    # shellcheck disable=SC2018,SC2019
     ostype="$(printf '%s' "$opt_ostype" | tr A-Z a-z)"
   else
-    # We only need to worry about ASCII here
+    # shellcheck disable=SC2018,SC2019
     ostype="$(uname -s | tr A-Z a-z)"
   fi
   case "$ostype" in
@@ -162,6 +176,9 @@ normalized_ostype() {
     (win32)    ostype="windows" ;;
     (ming*_nt) ostype="windows" ;;
   esac
+
+  # Deliberately not quoted, setting $@ within this function
+  # shellcheck disable=SC2086
   set $SUPPORTED_OSTYPES
   for x; do
     if [ "$x" = "$ostype" ]; then
@@ -176,6 +193,7 @@ validate_arch() {
   local check="$1"
   local x
   # Deliberately not quoted, setting $@ within this function
+  # shellcheck disable=SC2086
   set $SUPPORTED_ARCHS
   for x; do
     if [ "$x" = "$check" ]; then
@@ -247,6 +265,7 @@ dir_is_in_PATH() {
     (windows) IFS=';' ;;
     (*)       IFS=':' ;;
   esac
+  # shellcheck disable=SC2086
   set $PATH
   IFS="$oIFS"
   for pathdir
@@ -271,7 +290,13 @@ setup_tmp_dir() {
   WORK_DIR="$(mktemp -d 2>/dev/null || mktemp -d -t 'instmpdir')" || \
     die "failed to create a temporary directory with mktemp(1)"
   umask "$old_umask"
+  # We don't set "readonly WORK_DIR" because readonly is sometimes also "local"
+  # and we don't want that.
+
   # POSIX does not give rm(1) a `-v` flag.
+  # We deliberately are expanding the now-readonly WORK_DIR at trap set time,
+  # thus the double quotes, thus:
+  # shellcheck disable=SC2064
   trap "rm -rf -- '${WORK_DIR}'" EXIT
 }
 
@@ -435,7 +460,10 @@ fetch_and_validate_files() {
     varfile="./vars-${tool}.sh"
     unzip_dir="./extract-${tool}"
     vars="$(sed -n 's/=.*//p' < "$varfile")"
+    # This is an array-of-variable-names in a scalar, so:
+    # shellcheck disable=SC2086
     local $vars
+    # shellcheck source=/dev/null
     . "$varfile"
 
     if [ -n "$checksumfile" ]; then
@@ -454,6 +482,7 @@ fetch_and_validate_files() {
 
     INSTALL_FILES="${INSTALL_FILES}${INSTALL_FILES:+ }$WORK_DIR/$unzip_dir/$executable"
 
+    # shellcheck disable=SC2086
     unset $vars
   done
   cd "$here"
@@ -481,6 +510,8 @@ install_files() {
     echo >&2
   done
 
+  # array-in-scalar so:
+  # shellcheck disable=SC2086
   ls -ld $installed
   echo >&2
 }
