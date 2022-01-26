@@ -111,6 +111,7 @@ usage() {
   cat <<EOUSAGE
 Usage: $progname [-f] [-c <channel>] [-d <dir>] [-a <arch>] [-o <ostype>]
  -f           force, don't prompt before installing over files
+              (if the script is piped in on stdin, force will be forced on)
  -c channel   channel to install ("stable", "nightly")
  -d dir       directory to download into [default: $DEFAULT_BINARY_INSTALL_DIR]
  -o ostype    override the OS detection [allowed: $SUPPORTED_OSTYPES]
@@ -160,6 +161,10 @@ parse_options() {
 
   if [ "$opt_install_dir" = "" ]; then
     opt_install_dir="${DEFAULT_BINARY_INSTALL_DIR:?}"
+  fi
+  if ! [ -t 0 ]; then
+    # we won't be able to prompt the user; curl|sh pattern
+    opt_force=true
   fi
 }
 
