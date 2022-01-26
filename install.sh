@@ -76,6 +76,13 @@ progname="$(basename "$0" .sh)"
 note() { printf >&2 '%s: %s\n' "$progname" "$*"; }
 die() { note "$@"; exit 1; }
 
+# Handle the "pipe to shell" pattern
+case "$progname" in
+  sh | bash | ksh | zsh | dash)
+    progname="nats-install"
+    ;;
+esac
+
 main() {
   parse_options "$@"
 
