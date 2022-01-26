@@ -46,8 +46,18 @@ set -eu
 #   SC2086: we're using space-delimited arrays-in-strings, not ksh-ish arrays
 #           (oh how we wish general shell arrays could be assumed available)
 
-readonly CHANNELS_URL=FIXME
+# This location is temporary during development, we will have a better name
+# when we pick one, but this lets me get started with integration on the free
+# tier and figure out the moving pieces
+#
+# The CHANNELS_URL is the file defining current versions of stuff, and is edited
+# by humans and deployed
+readonly CHANNELS_URL='https://nats-tools.pages.dev/synadia-nats-channels.conf'
+# The NIGHTLY_URL is expected to be edited as a result of GitHub Actions cron-jobs,
+# updating the current version as a simple .txt file (containing YYYYMMDD) on
+# successful builds.
 readonly NIGHTLY_URL=FIXME
+
 readonly HTTP_USER_AGENT='synadia_install/0.3 (@ConnectEverything)'
 
 # This is a list of the architectures we support, which should be listed in
