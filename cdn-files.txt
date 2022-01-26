@@ -1,0 +1,5 @@
+# Files listed here are exposed to the world via the CDN on auto-deploy.
+# Keep the comment '#' in the first column, our parsing is crude.
+
+install.sh
+synadia-nats-channels.conf

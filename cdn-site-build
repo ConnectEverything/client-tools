@@ -1,0 +1,32 @@
+#!/bin/sh -eu
+set -eu
+
+progname="$(basename "$0" .sh)"
+warn() { printf >&2 '%s: %s\n' "$progname" "$*"; }
+die() { warn "$@"; exit 1; }
+
+readonly DEPLOY_DIR='deploy-site'
+readonly DEPLOY_CONF='cdn-files.txt'
+
+[ -f "$DEPLOY_CONF" ] || die "missing critical file: $DEPLOY_CONF (in $(pwd))"
+
+if [ -d "$DEPLOY_DIR" ]; then
+  warn "removing pre-existing: $DEPLOY_DIR"
+  rm -rf -- "$DEPLOY_DIR"
+fi
+mkdir -v -- "$DEPLOY_DIR"
+
+while read -r fn; do
+  [ -n "$fn" ] || continue
+  case "$fn" in
+    \#*) continue ;;
+  esac
+  d="$(dirname "$fn")"
+  if [ "$d" != "." ]; then
+    td="$DEPLOY_DIR/$d"
+    [ -d "$td" ] || mkdir -pv -- "$td"
+  else
+    td="$DEPLOY_DIR"
+  fi
+  cp -av "$fn" "$td/$fn"
+done < "$DEPLOY_CONF"
