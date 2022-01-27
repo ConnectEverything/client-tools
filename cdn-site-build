@@ -5,7 +5,7 @@ progname="$(basename "$0" .sh)"
 warn() { printf >&2 '%s: %s\n' "$progname" "$*"; }
 die() { warn "$@"; exit 1; }
 
-readonly DEPLOY_DIR='deploy-site'
+readonly DEPLOY_DIR='public'
 readonly DEPLOY_CONF='cdn-files.txt'
 
 [ -f "$DEPLOY_CONF" ] || die "missing critical file: $DEPLOY_CONF (in $(pwd))"
