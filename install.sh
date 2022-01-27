@@ -52,7 +52,7 @@ set -eu
 #
 # The CHANNELS_URL is the file defining current versions of stuff, and is edited
 # by humans and deployed
-readonly CHANNELS_URL='https://nats-tools.pages.dev/synadia-nats-channels.conf'
+readonly CHANNELS_URL='https://get-nats.io/synadia-nats-channels.conf'
 # The NIGHTLY_URL is expected to be edited as a result of GitHub Actions cron-jobs,
 # updating the current version as a simple .txt file (containing YYYYMMDD) on
 # successful builds.
