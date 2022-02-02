@@ -24,13 +24,14 @@ readonly HTTP_USER_AGENT='client-tools-builder/0.1 (@philpennock, ConnectEveryth
 readonly -a NEEDED_COMMANDS=(jq curl)
 
 # These will be set readonly at the end of parse_options:
-USE_EXISTING_BUILD=yes
+USE_EXISTING_BUILD=1   # should be '0' in production, but this is more convenient during dev; FIXME
 : "${NIGHTLY_DATE:=$(date +%F)}"
 
-declare -A tool_repo_slugs=(
+readonly -A tool_repo_slugs=(
   [nats]='nats-io/natscli'
   [nsc]='nats-io/nsc'
 )
+declare -A tool_current_commit=()
 
 # ========================================================================
 # FUNCTIONS ONLY, NO DIRECT EXECUTION IN THIS SECTION
@@ -41,7 +42,8 @@ usage() {
   cat <<EOUSAGE
 Usage: $progname [-d <date>] [-f]
   -d DATE     override date from ${NIGHTLY_DATE@Q}
-  -f          force build even if already exists
+  -f          force build even if already exists [FIXME: will invert]
+  -r          reuse existing build [FIXME: currently default, but won't be]
   -P          don't publish (don't need API keys)
 
 If publishing, expect the credentials in: \$CLOUDFLARE_AUTH_TOKEN
@@ -55,11 +57,12 @@ EOUSAGE
 parse_options() {
   local arg OPTIND
   opt_publish=1
-  while getopts ':d:fhP' arg; do
+  while getopts ':d:fhrP' arg; do
     case "$arg" in
       h) usage 0 ;;
       d) NIGHTLY_DATE="$OPTARG" ;;
-      f) USE_EXISTING_BUILD='' ;;
+      f) USE_EXISTING_BUILD=0 ;;
+      r) USE_EXISTING_BUILD=1 ;;
       P) opt_publish=0 ;;
       :) die_n "$EX_USAGE" "missing required option for -$OPTARG; see -h for help" ;;
       \?) die_n "$EX_USAGE" "unknown option -$OPTARG; see -h for help" ;;
@@ -89,7 +92,7 @@ dir_for_tool() {
 fetch_one_github_repo() {
   local tool="$1"
   shift
-  local clone_dir repo_clone_url too_old_tag
+  local clone_dir repo_clone_url too_old_tag commit
   cd "$start_cwd"
   require_known_tool "$tool"
   clone_dir="$(dir_for_tool "$tool")"
@@ -109,6 +112,8 @@ fetch_one_github_repo() {
       --shallow-exclude="$too_old_tag" \
       "$repo_clone_url" "$clone_dir"
   fi
+  commit="$(git -C "$clone_dir" rev-parse HEAD)"
+  tool_current_commit[$tool]="$commit"
 }
 
 # nsc overrides the dist dir from 'dist'.
@@ -137,7 +142,7 @@ build_one_tool() {
     return
   fi
   dist_dir="$(dist_dir_for_tool "$tool")"
-  if [[ -f "${dist_dir}/artifacts.json" ]] && [[ -n "${USE_EXISTING_BUILD:-}" ]]; then
+  if [[ -f "${dist_dir}/artifacts.json" ]] && (( USE_EXISTING_BUILD )); then
     stderr "reusing existing build in ${clone_dir@Q}"
     return
   fi
@@ -185,6 +190,11 @@ main() {
   # Now we can publish
   if (( opt_publish )); then
     stderr "FIXME: publish here"
+    # TODO: publish to CF
+    # TODO: update a nightly tag in git?  use tool_current_commit for that
+    # TODO: update a CF KV nightly tag to point to that
+    typeset -p tool_current_commit
+    # can point nightly-$NIGHTLY_DATE at that commit, and nightly too ... if we're happy to have a dynamically moving git tag in our repos (a big if)
   else
     stderr "skipping publishing, per request"
   fi
