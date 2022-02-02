@@ -1,0 +1,35 @@
+name: Client Tools nightly build
+
+on:
+  workflow_dispatch: {}
+  schedule:
+    - cron: "33 2 * * *"
+
+# FIXME: permissions:
+
+jobs:
+  nightly_release:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: 1.17
+
+# FIXME: cosign for artifacts
+# Use a different signing key to the one used for synadia-server
+
+      - name: Run nightlies build and release tool
+        id: build
+        run: |
+          ./build-nightlies.sh
+        env:
+          CLOUDFLARE_AUTH_TOKEN: ${{ secrets.CLOUDFLARE_AUTH_TOKEN }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+

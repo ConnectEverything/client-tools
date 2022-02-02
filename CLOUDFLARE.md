@@ -105,6 +105,15 @@ are `CF_API_KEY` and `CLOUDFLARE_AUTH_TOKEN`.  I've gone with
 `$CLOUDFLARE_AUTH_TOKEN` for the nightlies script.
 
 
+A second token with the exact same scopes has been created, and given the name:
+
+    github CE/client-tools secret (for nightlies)
+
+This has been populated into
+<https://github.com/ConnectEverything/client-tools/settings/secrets/actions>
+as a secret named `CLOUDFLARE_AUTH_TOKEN`.
+
+
 ## KV
 
 Created namespace "client-nightlies".
