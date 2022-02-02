@@ -70,6 +70,7 @@ readonly SUPPORTED_OSTYPES="linux darwin freebsd windows"
 # Where to install to, by default
 : "${HOME:=/home/$(id -un)}"
 readonly DEFAULT_BINARY_INSTALL_DIR="$HOME/.local/bin"
+readonly DEFAULT_NATS_CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/nats"
 
 ### END OF CONFIGURATION ###
 
@@ -97,11 +98,15 @@ main() {
 
   setup_tmp_dir
 
+  extract_previous_channel
+
   fetch_and_parse_channels
 
   fetch_and_validate_files
 
   install_files
+
+  store_channel
 
   show_instructions
 }
@@ -110,11 +115,12 @@ usage() {
   local ev="${1:-1}"
   [ "$ev" = 0 ] || exec >&2
   cat <<EOUSAGE
-Usage: $progname [-f] [-c <channel>] [-d <dir>] [-a <arch>] [-o <ostype>]
+Usage: $progname [-f] [-c <channel>] [-d <dir>] [-C <dir>] [-a <arch>] [-o <ostype>]
  -f           force, don't prompt before installing over files
               (if the script is piped in on stdin, force will be forced on)
  -c channel   channel to install ("stable", "nightly")
  -d dir       directory to download into [default: $DEFAULT_BINARY_INSTALL_DIR]
+ -C configdir directory to keep configs in [default: $DEFAULT_NATS_CONFIG_DIR]
  -o ostype    override the OS detection [allowed: $SUPPORTED_OSTYPES]
  -a arch      force choosing a specific processor architecture [allowed: $SUPPORTED_ARCHS]
 EOUSAGE
@@ -124,6 +130,7 @@ EOUSAGE
 }
 
 opt_install_dir=''
+opt_config_dir=''
 opt_channel=''
 opt_channel_file=''
 opt_nightly_date=''
@@ -131,7 +138,7 @@ opt_arch=''
 opt_ostype=''
 opt_force=false
 parse_options() {
-  while getopts ':a:c:d:fho:F:N:' arg; do
+  while getopts ':a:c:d:fho:C:F:N:' arg; do
     case "$arg" in
       (h) usage 0 ;;
 
@@ -146,6 +153,7 @@ parse_options() {
       (d) opt_install_dir="$OPTARG" ;;
       (f) opt_force=true ;;
       (o) opt_ostype="$OPTARG" ;;
+      (C) opt_config_dir="$OPTARG" ;;
       (F) opt_channel_file="$OPTARG" ;;
       (N) opt_nightly_date="$OPTARG" ;;
 
@@ -162,6 +170,9 @@ parse_options() {
 
   if [ "$opt_install_dir" = "" ]; then
     opt_install_dir="${DEFAULT_BINARY_INSTALL_DIR:?}"
+  fi
+  if [ "$opt_config_dir" = "" ]; then
+    opt_config_dir="${DEFAULT_NATS_CONFIG_DIR:?}"
   fi
   if ! [ -t 0 ]; then
     # we won't be able to prompt the user; curl|sh pattern
@@ -325,6 +336,7 @@ setup_tmp_dir() {
 }
 
 # SIDE EFFECT: sets $ALL_TOOLS
+# SIDE EFFECT: sets $ON_CHANNEL
 fetch_and_parse_channels() {
   # This is not the most efficient, sed'ing from a temporary file repeatedly,
   # but it's very portable and the more efficient approaches suffer in
@@ -352,6 +364,16 @@ fetch_and_parse_channels() {
     die "unable to parse any channels from '${chan_origin}'"
   fi
 
+  if [ -n "${PREVIOUS_CHANNEL?should have set PREVIOUS_CHANNEL, even if just to empty}" ]; then
+    if [ -n "$opt_channel" ]; then
+      true # command-line flags override previous channel
+    else
+      opt_channel="$PREVIOUS_CHANNEL"
+    fi
+  else
+    true # first successful (we hope) run
+  fi
+
   # We don't grep, the opt comes from the user and we don't trust
   # that ultimately it won't come from somewhere else automated, so might
   # contain regexp special characters.
@@ -371,6 +393,8 @@ fetch_and_parse_channels() {
   fi
 
   note "channel: ${channel}"
+  # this is used later to persist the chosen channel
+  ON_CHANNEL="$channel"
 
   if [ "$channel" = "nightly" ]; then
     if [ -n "$opt_nightly_date" ]; then
@@ -569,6 +593,20 @@ Zsh Example:
 EOOTHER
 
   esac
+}
+
+extract_previous_channel() {
+  PREVIOUS_CHANNEL=''
+  [ -f "$opt_config_dir/install-channel.txt" ] || return 0
+  PREVIOUS_CHANNEL="$(cat "$opt_config_dir/install-channel.txt")"
+}
+
+store_channel() {
+  if [ -n "$PREVIOUS_CHANNEL" ] && [ "$PREVIOUS_CHANNEL" = "$ON_CHANNEL" ]; then
+    return 0
+  fi
+  [ -d "$opt_config_dir" ] || mkdir -p -- "$opt_config_dir"
+  printf > "$opt_config_dir/install-channel.txt" '%s\n' "$ON_CHANNEL"
 }
 
 main "$@"
