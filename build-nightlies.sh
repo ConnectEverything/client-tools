@@ -17,15 +17,20 @@ readonly start_cwd
 # CONFIG
 
 readonly BUILD_DIR='build'
-readonly SAFETY_CHECK_FILE='synadia-nats-channels.conf'
+readonly CLOUDFLARE_VARS_FILE='cloudflare.conf'
 readonly HTTP_USER_AGENT='client-tools-builder/0.1 (@philpennock, ConnectEverything)'
+readonly CLOUDFLARE_API_URL='https://api.cloudflare.com/client/v4'
 
 # FIXME: do we need wrangler here
 readonly -a NEEDED_COMMANDS=(jq curl zip sha256sum)
 
 # These will be set readonly at the end of parse_options:
 USE_EXISTING_BUILD=1   # should be '0' in production, but this is more convenient during dev; FIXME
-: "${NIGHTLY_DATE:=$(date +%F)}"
+: "${NIGHTLY_DATE:=$(date +%Y%m%d)}"
+
+# We keep nightlies in CF for a limited amount of time, letting CF auto-expire them.
+declare -i NIGHTLY_EXPIRATION_TTL=$(( 14 * 24 * 3600 ))
+readonly NIGHTLY_EXPIRATION_TTL
 
 readonly -A tool_repo_slugs=(
   [nats]='nats-io/natscli'
@@ -79,7 +84,8 @@ parse_options() {
 }
 
 ua_curl() { command curl --user-agent "${HTTP_USER_AGENT:?}" "$@"; }
-cf_curl() { ua_curl -H "Authorization: Bearer $CLOUDFLARE_AUTH_TOKEN" -H "Content-Type: application/json" "$@"; }
+cf_curl_noct() { ua_curl -H "Authorization: Bearer $CLOUDFLARE_AUTH_TOKEN" "$@"; }
+cf_curl() { cf_curl_noct -H "Content-Type: application/json" "$@"; }
 gh_curl() { ua_curl --user "${GITHUB_TOKEN}:x-oauth-basic" "$@"; }
 
 is_known_tool() { [[ -n "${tool_repo_slugs[$1]:+isset}" ]]; }
@@ -201,7 +207,38 @@ collect_nightly_zips_of_tool() {
 write_checksums() {
   cd "$(nightly_dir)"
   stderr "writing checksums file(s)"
-  sha256sum -b *.zip > SHA256SUMS
+  sha256sum -b *.zip > "SHA256SUMS-$NIGHTLY_DATE.txt"
+}
+
+# FIXME: we're using KV store for now, but this probably belongs in R2, once we get access to that.
+# R2 is currently on a waitlist.
+publish_nightly_files_to_cloudflare() {
+  local tool key url api ct params
+  cd "$(nightly_dir)"
+  printf > 'CURRENT' '%s\n' "$NIGHTLY_DATE"
+  for tool in "${!tool_repo_slugs[@]}"; do
+    printf '%s: %s\n' "$tool" "${tool_current_commit[$tool]}"
+  done | tee "COMMITS-$NIGHTLY_DATE.txt"
+
+  # FIXME: loop first, check sizes, complain if any are over 100MB, the size limit here
+
+  for key in *; do
+    case "$key" in
+      *.zip) ct='application/zip' ;;
+      *) ct='text/plain' ;;
+    esac
+
+    # <https://api.cloudflare.com/#workers-kv-namespace-write-key-value-pair>
+    # "permission needed: com.cloudflare.edge.storage.kv.key.update"
+
+    api="accounts/$CF_ACCOUNT/storage/kv/namespaces/$CF_NIGHTLIES_KV_NAMESPACE/values/$key"
+    params="expiration_ttl=$NIGHTLY_EXPIRATION_TTL"
+    url="$CLOUDFLARE_API_URL/$api?$params"
+    stderr "uploading: ${key@Q}"
+    cf_curl_noct -X PUT "$url" -H "Content-Type: $ct" --data-binary "@$key"
+    sleep 0.5
+  done
+  stderr "uploaded all"
 }
 
 # ========================================================================
@@ -213,12 +250,15 @@ main() {
   parse_options "$@"
   shift "$parse_options_caller_shift"
 
-  [[ -f "$SAFETY_CHECK_FILE" ]] || die "bad starting dir? missing file ${SAFETY_CHECK_FILE@Q}"
+  [[ -f "$CLOUDFLARE_VARS_FILE" ]] || die "bad starting dir? missing file ${CLOUDFLARE_VARS_FILE@Q}"
   for cmd in "${NEEDED_COMMANDS[@]}"; do
     have_command "$cmd" || die "missing tool: ${cmd@Q}"
   done
   if (( opt_publish )); then
+    . "./$CLOUDFLARE_VARS_FILE"
     check_have_publish_credentials
+    [[ -n "${CF_ACCOUNT:-}" ]] || die "missing cloudflare account in config"
+    [[ -n "${CF_NIGHTLIES_KV_NAMESPACE:-}" ]] || die "missing cloudflare KV namespace in config"
   fi
   case "$NIGHTLY_DATE" in
     */*) die "the NIGHTLY_DATE value contains a directory separator, do not do that: ${NIGHTLY_DATE@Q}" ;;
@@ -238,11 +278,7 @@ main() {
 
   # Now we can publish
   if (( opt_publish )); then
-    stderr "FIXME: publish here"
-    # TODO: publish to CF
-    # TODO: update a nightly tag in git?  use tool_current_commit for that
-    # TODO: update a CF KV nightly tag to point to that
-    typeset -p tool_current_commit
+    publish_nightly_files_to_cloudflare
     # can point nightly-$NIGHTLY_DATE at that commit, and nightly too ... if we're happy to have a dynamically moving git tag in our repos (a big if)
   else
     stderr "skipping publishing, per request"

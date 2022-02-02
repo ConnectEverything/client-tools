@@ -3,7 +3,9 @@ CloudFlare
 
 We are paying for the $200/month team for the "get-nats.io" website.
 
-Some notes
+Some notes.
+
+Identifiers are in [cloudflare.conf](cloudflare.conf).
 
 ## General Flow
 
@@ -102,3 +104,7 @@ should be called; the CF `wrangler` tool just writes it into
 are `CF_API_KEY` and `CLOUDFLARE_AUTH_TOKEN`.  I've gone with
 `$CLOUDFLARE_AUTH_TOKEN` for the nightlies script.
 
+
+## KV
+
+Created namespace "client-nightlies".
