@@ -25,11 +25,20 @@ jobs:
 # FIXME: cosign for artifacts
 # Use a different signing key to the one used for synadia-server
 
+      - name: Install GoReleaser
+        id: goreleaser-install
+        uses: goreleaser/goreleaser-action@v2
+        with:
+          distribution: goreleaser-pro
+          version: latest
+          install-only: true
+
       - name: Run nightlies build and release tool
         id: build
         run: |
           ./build-nightlies.sh
         env:
           CLOUDFLARE_AUTH_TOKEN: ${{ secrets.CLOUDFLARE_AUTH_TOKEN }}
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 

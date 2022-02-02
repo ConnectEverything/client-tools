@@ -21,7 +21,7 @@ readonly CLOUDFLARE_VARS_FILE='cloudflare.conf'
 readonly HTTP_USER_AGENT='client-tools-builder/0.1 (@philpennock, ConnectEverything)'
 readonly CLOUDFLARE_API_URL='https://api.cloudflare.com/client/v4'
 
-readonly -a NEEDED_COMMANDS=(jq curl zip sha256sum)
+readonly -a NEEDED_COMMANDS=(jq curl zip sha256sum goreleaser)
 
 # These will be set readonly at the end of parse_options:
 USE_EXISTING_BUILD=0
