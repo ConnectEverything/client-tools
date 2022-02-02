@@ -21,7 +21,7 @@ readonly SAFETY_CHECK_FILE='synadia-nats-channels.conf'
 readonly HTTP_USER_AGENT='client-tools-builder/0.1 (@philpennock, ConnectEverything)'
 
 # FIXME: do we need wrangler here
-readonly -a NEEDED_COMMANDS=(jq curl)
+readonly -a NEEDED_COMMANDS=(jq curl zip sha256sum)
 
 # These will be set readonly at the end of parse_options:
 USE_EXISTING_BUILD=1   # should be '0' in production, but this is more convenient during dev; FIXME
@@ -89,6 +89,10 @@ dir_for_tool() {
   printf '%s/%s/%s\n' "$start_cwd" "$BUILD_DIR" "$1"
 }
 
+nightly_dir() {
+  printf '%s/%s/%s-%s\n' "$start_cwd" "$BUILD_DIR" nightly "$NIGHTLY_DATE"
+}
+
 fetch_one_github_repo() {
   local tool="$1"
   shift
@@ -146,6 +150,7 @@ build_one_tool() {
     stderr "reusing existing build in ${clone_dir@Q}"
     return
   fi
+
   goreleaser build --snapshot --rm-dist
 }
 
@@ -159,6 +164,44 @@ check_have_publish_credentials() {
   status="$(jq <<<"$verify" -er .result.status)"
   [[ "$status" == "active" ]] || die "$label says \$CLOUDFLARE_AUTH_TOKEN is not active"
   stderr 'creds okay'
+}
+
+collect_nightly_zips_of_tool() {
+  local tool="$1"
+  shift
+  local binary_dir zip_dir zipfn binpath fn_date
+  binary_dir="$(dist_dir_for_tool "$tool")"
+  zip_dir="$(nightly_dir)"
+
+  # We want YYYYMMDD in the filenames, using - to separate components such as
+  # date from OS, not used within the date.
+  fn_date="${NIGHTLY_DATE//-/}"
+
+  [[ -f "$binary_dir/artifacts.json" ]] || die "missing artifacts.json for ${tool@Q}"
+  [[ -d "$zip_dir" ]] || mkdir -pv -- "$zip_dir"
+
+  jq < "$binary_dir/artifacts.json" -er \
+    --arg Tool "$tool" --arg Date "$fn_date" \
+      '.[] | select(.type == "Binary") |
+       "\($Tool)/\(.goos)-\(.goarch)\(.goarm // "")  \($Tool)-\($Date)-\(.goos)-\(.goarch)\(.goarm // "").zip  \(.path)"' \
+  | while read -r label zipfn binpath; do
+    # -j to junk paths and just store the filename
+    stderr "zip for: $label"
+    if [[ -f "$zip_dir/$zipfn" ]]; then
+      if (( USE_EXISTING_BUILD )); then
+        stderr " ... skipping, using existing"
+        continue
+      fi
+      die "duplicate attempt to write to same .zip file ${zipfn@Q}"
+    fi
+    zip -j "$zip_dir/$zipfn" "$binpath"
+  done
+}
+
+write_checksums() {
+  cd "$(nightly_dir)"
+  stderr "writing checksums file(s)"
+  sha256sum -b *.zip > SHA256SUMS
 }
 
 # ========================================================================
@@ -177,6 +220,9 @@ main() {
   if (( opt_publish )); then
     check_have_publish_credentials
   fi
+  case "$NIGHTLY_DATE" in
+    */*) die "the NIGHTLY_DATE value contains a directory separator, do not do that: ${NIGHTLY_DATE@Q}" ;;
+  esac
 
   stderr "building $NIGHTLY_DATE"
 
@@ -186,7 +232,10 @@ main() {
   for tool in "${!tool_repo_slugs[@]}"; do
     fetch_one_github_repo "$tool"
     build_one_tool "$tool"
+    collect_nightly_zips_of_tool "$tool"
   done
+  write_checksums
+
   # Now we can publish
   if (( opt_publish )); then
     stderr "FIXME: publish here"
