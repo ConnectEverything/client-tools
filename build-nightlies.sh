@@ -210,10 +210,35 @@ write_checksums() {
 
 # TODO: we're using KV store for now, but this probably belongs in R2, once we get access to that.
 # R2 is currently on a waitlist.
+#
+# Expect: already in correct directory; key == filename
+publish_one_file_to_cloudflare() {
+  local key="${1:?}"
+  local url api ct params
+
+  case "$key" in
+    *.zip) ct='application/zip' ;;
+    *) ct='text/plain' ;;
+  esac
+
+  # <https://api.cloudflare.com/#workers-kv-namespace-write-key-value-pair>
+  # "permission needed: com.cloudflare.edge.storage.kv.key.update"
+
+  api="accounts/$CF_ACCOUNT/storage/kv/namespaces/$CF_NIGHTLIES_KV_NAMESPACE/values/$key"
+  params="expiration_ttl=$NIGHTLY_EXPIRATION_TTL"
+  url="$CLOUDFLARE_API_URL/$api?$params"
+  stderr "uploading: ${key@Q}"
+  cf_curl_noct -X PUT "$url" -H "Content-Type: $ct" --data-binary "@$key"
+}
+
 publish_nightly_files_to_cloudflare() {
-  local tool key url api ct params
+  local tool key
   cd "$(nightly_dir)"
-  printf > 'CURRENT' '%s\n' "$NIGHTLY_DATE"
+
+  # remove all indices
+  rm -vf CURRENT COMMITS-*.txt
+
+  # Include a key which identifies which commits this nightly corresponds to
   for tool in "${!tool_repo_slugs[@]}"; do
     printf '%s: %s\n' "$tool" "${tool_current_commit[$tool]}"
   done | tee "COMMITS-$NIGHTLY_DATE.txt"
@@ -221,21 +246,17 @@ publish_nightly_files_to_cloudflare() {
   # TODO: loop first, check sizes, complain if any are over 100MB, the size limit here
 
   for key in *; do
-    case "$key" in
-      *.zip) ct='application/zip' ;;
-      *) ct='text/plain' ;;
-    esac
-
-    # <https://api.cloudflare.com/#workers-kv-namespace-write-key-value-pair>
-    # "permission needed: com.cloudflare.edge.storage.kv.key.update"
-
-    api="accounts/$CF_ACCOUNT/storage/kv/namespaces/$CF_NIGHTLIES_KV_NAMESPACE/values/$key"
-    params="expiration_ttl=$NIGHTLY_EXPIRATION_TTL"
-    url="$CLOUDFLARE_API_URL/$api?$params"
-    stderr "uploading: ${key@Q}"
-    cf_curl_noct -X PUT "$url" -H "Content-Type: $ct" --data-binary "@$key"
+    publish_one_file_to_cloudflare "$key"
     sleep 0.5
   done
+
+  # ONLY AT END!
+  # Do not update the CURRENT key until all the assets have been uploaded.
+  # We don't want to update the CURRENT seen by clients before their binaries
+  # are in place.
+  printf > 'CURRENT' '%s\n' "$NIGHTLY_DATE"
+  publish_one_file_to_cloudflare 'CURRENT'
+
   stderr "uploaded all"
 }
 
