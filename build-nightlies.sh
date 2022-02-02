@@ -21,11 +21,10 @@ readonly CLOUDFLARE_VARS_FILE='cloudflare.conf'
 readonly HTTP_USER_AGENT='client-tools-builder/0.1 (@philpennock, ConnectEverything)'
 readonly CLOUDFLARE_API_URL='https://api.cloudflare.com/client/v4'
 
-# FIXME: do we need wrangler here
 readonly -a NEEDED_COMMANDS=(jq curl zip sha256sum)
 
 # These will be set readonly at the end of parse_options:
-USE_EXISTING_BUILD=1   # should be '0' in production, but this is more convenient during dev; FIXME
+USE_EXISTING_BUILD=0
 : "${NIGHTLY_DATE:=$(date +%Y%m%d)}"
 
 # We keep nightlies in CF for a limited amount of time, letting CF auto-expire them.
@@ -45,12 +44,12 @@ usage() {
   local ev="${1:-1}"
   [[ $ev -eq 0 ]] || exec >&2
   cat <<EOUSAGE
-Usage: $progname [-d <date>] [-f]
+Usage: $progname [-d <date>] [-rP]
   -d DATE     override date from ${NIGHTLY_DATE@Q}
-  -f          force build even if already exists [FIXME: will invert]
-  -r          reuse existing build [FIXME: currently default, but won't be]
+  -r          reuse existing build
   -P          don't publish (don't need API keys)
 
+The DATE should be in YYYYMMDD format.
 If publishing, expect the credentials in: \$CLOUDFLARE_AUTH_TOKEN
 EOUSAGE
   exit "$ev"
@@ -62,11 +61,10 @@ EOUSAGE
 parse_options() {
   local arg OPTIND
   opt_publish=1
-  while getopts ':d:fhrP' arg; do
+  while getopts ':d:hrP' arg; do
     case "$arg" in
       h) usage 0 ;;
       d) NIGHTLY_DATE="$OPTARG" ;;
-      f) USE_EXISTING_BUILD=0 ;;
       r) USE_EXISTING_BUILD=1 ;;
       P) opt_publish=0 ;;
       :) die_n "$EX_USAGE" "missing required option for -$OPTARG; see -h for help" ;;
@@ -210,7 +208,7 @@ write_checksums() {
   sha256sum -b *.zip > "SHA256SUMS-$NIGHTLY_DATE.txt"
 }
 
-# FIXME: we're using KV store for now, but this probably belongs in R2, once we get access to that.
+# TODO: we're using KV store for now, but this probably belongs in R2, once we get access to that.
 # R2 is currently on a waitlist.
 publish_nightly_files_to_cloudflare() {
   local tool key url api ct params
@@ -220,7 +218,7 @@ publish_nightly_files_to_cloudflare() {
     printf '%s: %s\n' "$tool" "${tool_current_commit[$tool]}"
   done | tee "COMMITS-$NIGHTLY_DATE.txt"
 
-  # FIXME: loop first, check sizes, complain if any are over 100MB, the size limit here
+  # TODO: loop first, check sizes, complain if any are over 100MB, the size limit here
 
   for key in *; do
     case "$key" in

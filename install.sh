@@ -62,6 +62,7 @@ readonly HTTP_USER_AGENT='synadia_install/0.3 (@ConnectEverything)'
 
 # This is a list of the architectures we support, which should be listed in
 # the Go architecture naming format.
+# When we add 32-bit arm, the 6 or 7 GOARM gets included here
 readonly SUPPORTED_ARCHS="amd64 arm64"
 # This is a list of the known OSes, to validate user input
 readonly SUPPORTED_OSTYPES="linux darwin freebsd windows"
@@ -257,6 +258,7 @@ normalized_arch() {
     (amd64) true ;;
     (aarch64) narch="arm64" ;;
     (arm64) true ;;
+    (armv7l) narch='arm7' ;;  # not yet in the supported list, but this is the pattern we need
     (*) die "Unhandled architecture '$narch', use -a flag to select a supported arch" ;;
   esac
   if validate_arch "$narch"; then

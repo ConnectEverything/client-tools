@@ -108,3 +108,10 @@ are `CF_API_KEY` and `CLOUDFLARE_AUTH_TOKEN`.  I've gone with
 ## KV
 
 Created namespace "client-nightlies".
+
+The nightly build data can thus be seen at:
+
+<https://dash.cloudflare.com/32578e55e8e251552382924d4855e414/workers/kv/namespaces/eb4407c72ba74904b9602a60813a42ee>
+
+To force "current" to go back, in the event of a bad nightly, you can manually
+edit the key named `CURRENT` at that URL.
