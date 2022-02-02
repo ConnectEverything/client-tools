@@ -287,18 +287,30 @@ main() {
 
   [[ -d "$BUILD_DIR" ]] || mkdir -pv -- "$BUILD_DIR"
 
+  # For the :: echo commands, see documentation at
+  # <https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions>
+
   # We do not publish in the first loop, so that we have complete consistent sets
   for tool in "${!tool_repo_slugs[@]}"; do
+    echo "::group::Fetching $tool"
     fetch_one_github_repo "$tool"
+    echo "::endgroup::"
+    echo "::group::Building $tool"
     build_one_tool "$tool"
+    echo "::endgroup::"
+    echo "::group::Zipping $tool"
     collect_nightly_zips_of_tool "$tool"
+    echo "::endgroup::"
   done
   write_checksums
 
   # Now we can publish
   if (( opt_publish )); then
+    echo "::group::Publishing to CloudFlare"
     publish_nightly_files_to_cloudflare
+    echo "::endgroup::"
     # can point nightly-$NIGHTLY_DATE at that commit, and nightly too ... if we're happy to have a dynamically moving git tag in our repos (a big if)
+    echo "::set-output name=nightly-version::$NIGHTLY_DATE"
   else
     stderr "skipping publishing, per request"
   fi
