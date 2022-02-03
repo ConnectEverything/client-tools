@@ -113,9 +113,25 @@ This has been populated into
 <https://github.com/ConnectEverything/client-tools/settings/secrets/actions>
 as a secret named `CLOUDFLARE_AUTH_TOKEN`.
 
-Later, the workstation token was updated to gain `Workers Scripts:Edit`
-permission, for managing the scripts with Wrangler.
+### Later staff workstation changes
 
+Later, the workstation token was updated to gain new permissions, to manage
+the workers and work with the _wrangler_ CLI tool.  These were not applied to
+the token configured into GitHub, because the nightly cronjob only needs to
+update the KV store.
+
+Added:
+ * Account `Workers Scripts:Edit` : to manage the scripts
+ * User `User Details:Read` : because Wrangler errors out without this
+ * Zone
+
+Result:
+
+```
+Synadia Communications - Workers R2 Storage:Edit, Workers KV Storage:Edit, Workers Scripts:Edit
+  get-nats.io - Workers Routes:Edit
+All users - User Details:Read
+```
 
 ## KV
 

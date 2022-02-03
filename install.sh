@@ -56,7 +56,7 @@ readonly CHANNELS_URL='https://get-nats.io/synadia-nats-channels.conf'
 # The NIGHTLY_URL is expected to be edited as a result of GitHub Actions cron-jobs,
 # updating the current version as a simple .txt file (containing YYYYMMDD) on
 # successful builds.
-readonly NIGHTLY_URL=FIXME
+readonly NIGHTLY_URL='https://get-nats.io/current-nightly'
 
 readonly HTTP_USER_AGENT='synadia_install/0.3 (@ConnectEverything)'
 
@@ -353,7 +353,7 @@ fetch_and_parse_channels() {
   else
     chanfile="$WORK_DIR/channels.conf"
     chan_origin="$CHANNELS_URL"
-    curl_cmd --progress-bar --location --output "$chanfile" "$CHANNELS_URL"
+    curl_cmd -fSs --location --output "$chanfile" "$CHANNELS_URL"
   fi
   [ -f "$chanfile" ] || die "missing a channels file"
 
@@ -399,11 +399,8 @@ fetch_and_parse_channels() {
   if [ "$channel" = "nightly" ]; then
     if [ -n "$opt_nightly_date" ]; then
       nightly_version="$opt_nightly_date"
-    elif [ "$NIGHTLY_URL" = "FIXME" ]; then
-      # XXX FIXME dev data assistance
-      nightly_version="$(date +%Y%m%d)"
     else
-      nightly_version="$(cmd_curl -fSs "$NIGHTLY_URL")"
+      nightly_version="$(curl_cmd -fSs "$NIGHTLY_URL")"
     fi
   fi
 
@@ -515,12 +512,12 @@ fetch_and_validate_files() {
     . "$varfile"
 
     if [ -n "$checksumfile" ]; then
-      curl_cmd --progress-bar --location \
+      curl_cmd --progress-bar --fail --location \
         --output "./$zipfile" "${urldir%/}/$zipfile" \
         --output "./$checksumfile" "${urldir%/}/$checksumfile"
       note "FIXME: need to validate checksums in $checksumfile"
     else
-      curl_cmd --progress-bar --location \
+      curl_cmd --progress-bar --fail --location \
         --output "./$zipfile" "${urldir%/}/$zipfile"
     fi
 

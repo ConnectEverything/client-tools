@@ -1,12 +1,24 @@
 name = "nightlies-serving"
 type = "javascript"
-zone_id = ""
+zone_id = "4b53c2442ec2650d13753d68bc90ffd7"
 account_id = "32578e55e8e251552382924d4855e414"
-route = "get-nats.io/nightly/*"
 workers_dev = true
 compatibility_date = "2022-02-03"
+# We include some settings here outside the envs, because we only have one
+routes = [
+  "get-nats.io/nightly/*",
+  "get-nats.io/current-nightly",
+]
+kv_namespaces = [
+  { binding = "ASSETS", id = "eb4407c72ba74904b9602a60813a42ee" }
+]
+
+# If we include [env.production] then it seems a new worker, with the env in the name, gets created
+# We end up with `nightlies-serving` as worker with env production and `nightlies-serving-production` with env production.
+# Hum.
 
 [build]
 command = "npm install && npm run build"
+
 [build.upload]
 format = "service-worker"
