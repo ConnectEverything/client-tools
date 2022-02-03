@@ -113,6 +113,9 @@ This has been populated into
 <https://github.com/ConnectEverything/client-tools/settings/secrets/actions>
 as a secret named `CLOUDFLARE_AUTH_TOKEN`.
 
+Later, the workstation token was updated to gain `Workers Scripts:Edit`
+permission, for managing the scripts with Wrangler.
+
 
 ## KV
 
@@ -124,3 +127,69 @@ The nightly build data can thus be seen at:
 
 To force "current" to go back, in the event of a bad nightly, you can manually
 edit the key named `CURRENT` at that URL.
+
+
+## Workers
+
+Note that there are two contexts in which "Workers" shows up in the left-hand
+navigation panel: within a domain, and at the account level.  
+To manage routes, we do that within a domain/website.  
+To manage the code, we do so at the account level.
+
+
+Account level, Workers: "Create a Service"  
+Named it: `nightlies-serving`
+> Your service is now deployed globally at nightlies-serving.synadia.workers.dev
+
+We get one environment to start, named `production`, and I didn't change that.
+
+Three things to do:
+ * bind to the KV namespace
+ * set up HTTP routes to use in our own domain
+ * set up code to route requests to the KV assets
+
+Under `Settings`, `Variables`
+<https://dash.cloudflare.com/32578e55e8e251552382924d4855e414/workers/services/view/nightlies-serving/production/settings/bindings>
+I bound variable `ASSETS` to KV Namespace `client-nightlies`.
+(Can bind multiple variable:KVN so can use other namespaces easily too).
+
+I got the worker running via direct editing inside the browser, instead of
+setting up Wrangler management.
+The source was:
+
+```javascript
+addEventListener("fetch", event => {
+  event.respondWith(handleRequest(event.request))
+})
+
+async function handleRequest(request) {
+  return handleCurrentRequest(request)
+}
+
+async function handleCurrentRequest(request) {
+  const value = await ASSETS.get("CURRENT", {type: "text"})
+  if (value === null) {
+    return new Response("Current value not found", {status: 404})
+  }
+
+  return new Response(value)
+}
+```
+
+Then in
+<https://dash.cloudflare.com/32578e55e8e251552382924d4855e414/get-nats.io/workers>
+I added a route:
+ * Route `get-nats.io/nightly/*`
+ * Service `nightlies-serving`
+ * Environment `production`
+
+At this point, <https://get-nats.io/nightly/current> works.
+
+Then in this repo:
+
+```sh
+wrangler generate nightlies-serving \
+  https://github.com/cloudflare/worker-typescript-template
+```
+
+and then we work on the worker within that area.

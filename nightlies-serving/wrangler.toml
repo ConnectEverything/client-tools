@@ -1,0 +1,12 @@
+name = "nightlies-serving"
+type = "javascript"
+zone_id = ""
+account_id = "32578e55e8e251552382924d4855e414"
+route = "get-nats.io/nightly/*"
+workers_dev = true
+compatibility_date = "2022-02-03"
+
+[build]
+command = "npm install && npm run build"
+[build.upload]
+format = "service-worker"
