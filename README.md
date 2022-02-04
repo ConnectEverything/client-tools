@@ -150,8 +150,8 @@ An installer needs to be able to fetch:
 and to write the current channel out to `~/.config/nats/install-channel.txt`
 (as perhaps modified by ADR-22).
 
-On start-up, if `~/.config/nats/install-channel.txt` then it should be read
-and parsed and used as the _default_ NATS channel, unless explicitly
+On start-up, if `~/.config/nats/install-channel.txt` exists then it should be
+read and parsed and used as the _default_ NATS channel, unless explicitly
 overridden.
 
 The `synadia-nats-channels.conf` file was created for the needs of a shell
@@ -167,6 +167,14 @@ involved.
 To make new data formats for the channels information, add the conversion into
 the `cdn-site-build` script so that the CF site builder will automatically
 make the extra file when GitHub notifies it of the site push.
+This should not require removing the existing `.conf` file: it remains in use
+for the shell installer.  We can make 30 different config files from the same
+source, if need be.
+The `cdn-site-build` script is currently as simple as it can be, to make it
+"very unlikely to break" as CloudFlare updates the execution environment of
+site builders; or if we move to a different CDN.
+But, unlike the installers which run on whatever system end-users are running,
+we can depend upon more tools, as we think makes sense.
 
 The `synadia-nats-channels.conf` file defines both which channels exist and
 which tools exist.  An installer needs to special-case the channel `nightly`
