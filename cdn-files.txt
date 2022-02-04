@@ -8,3 +8,14 @@ synadia-nats-channels.conf
 # <https://developers.cloudflare.com/pages/platform/redirects>
 
 _redirects
+
+# The file nightlies-serving/wrangler.toml defines "routes" which will be
+# handled by the worker code in that directory.
+# Those will be intercepted by CF and served from the KV store, instead
+# of the static site which this file manages.
+#
+# So in addition to whatever we define here, the site will publish:
+#  - get-nats.io/current-nightly
+#  - get-nats.io/nightly/*
+#
+

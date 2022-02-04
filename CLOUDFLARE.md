@@ -171,7 +171,7 @@ I bound variable `ASSETS` to KV Namespace `client-nightlies`.
 
 I got the worker running via direct editing inside the browser, instead of
 setting up Wrangler management.
-The source was:
+The source **was** (but is no longer):
 
 ```javascript
 addEventListener("fetch", event => {
@@ -209,3 +209,12 @@ wrangler generate nightlies-serving \
 ```
 
 and then we work on the worker within that area.
+
+The end result, self-contained within the `nightlies-serving/` directory here,
+is a node/webpack typescript HTTP handler which can be deployed with
+`wrangler publish`.  That will build a service-worker, upload it, and make
+sure the routes are correct.
+
+The code in `nightlies-serving/src/handler.ts` pretty much just front-ends
+HTTP requests onto the KV store.
+
