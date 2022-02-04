@@ -71,6 +71,11 @@ version of the nightlies.
 The nightly assets are given a two week TTL in CF's KV store, so will
 automatically expire after two weeks.
 
+We include `SHA256SUMS-${YYYYMMDD}.txt` and `COMMITS-${YYYYMMDD}.txt` as
+assets for each nightly build.  We expect the installer to use the former.
+Nothing uses the COMMITS file (yet); it's simply a record of what git commit
+each tool repo was at, when that nightly build was made.
+
 
 ## CloudFlare Workers Site
 
@@ -116,6 +121,11 @@ So in the end:
    those to a KV namespace in CloudFlare; these are the "nightlies"
 4. CF maps `get-nats.io/nightly/*` and `get-nats.io/current-nightly` to be
    served from the KV store
+   + One currently nightly version exists, across all tools
+   + For consistency, there are still separate zip files, one for each tool
+   + `SHA256SUMS-${YYYYMMDD}.txt` has checksums for all the zip files of that night
+   + `COMMITS-${YYYYMMDD}.txt` records which commit each tool was built at
+     - `curl https://get-nats.io/nightly/COMMITS-20220203.txt`
 
 The end-user runs:
 
