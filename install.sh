@@ -200,6 +200,22 @@ check_have_external_commands() {
   # PORTABILITY ISSUE: WINDOWS?
   test -e /dev/stdin || die "missing device /dev/stdin"
 
+  if have_command install; then
+    # Busybox limits flags to: -c -d -D -s -p -o -g -m -t
+    # FreeBSD does not have -T
+    if ( install --help 2>&1 || true ) | grep -qs -- --no-target-directory ; then
+      install_force() { command install -bTv "$1" "$2/${1##*/}"; }
+    elif ( install --help 2>&1 || true ) | grep -qs -- '-T tags' ; then
+      install_force() { command install -bv "$1" "$2/${1##*/}"; }
+    else
+      install_force() { command install "$1" "$2/${1##*/}"; }
+    fi
+    install_prompt_overwrite() { mv -i -- "$1" "$2/"; }
+  else
+    install_force() { mv -f -- "$1" "$2/"; }
+    install_prompt_overwrite() { mv -i -- "$1" "$2/"; }
+  fi
+
   # After this point, we exit as soon as we find a valid means to verify a
   # checksums file.
   # The --ignore-missing flag to sha256sum and friends is _fairly_ portable,
@@ -632,14 +648,22 @@ install_files() {
   echo >&2
   installed=''
 
+  # The install command can take backups, and takes care of "text file busy"
+  # problems when the target path is currently that of a running executable.
+  # mv is a good second choice.  cp will more likely trigger busy problems.
+  # (Someone running `nats sub '>'` would see this).
+  # (Some modern systems don't trigger this any more).
+  # This is why we setup install_force/install_prompt_overwrite in the
+  # check_have_external_commands function.
+
   for fn in $INSTALL_FILES; do
     note "installing: ${fn##*/}"
     # prompt the user to overwrite if need be
     chmod 0755 "$fn"
     if $opt_force; then
-      mv -f -- "$fn" "$opt_install_dir/"
+      install_force "$fn" "$opt_install_dir"
     else
-      mv -i -- "$fn" "$opt_install_dir/"
+      install_prompt_overwrite "$fn" "$opt_install_dir"
     fi
     installed="${installed}${installed:+ }$opt_install_dir/${fn##*/}"
     echo >&2

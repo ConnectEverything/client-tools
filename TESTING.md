@@ -14,6 +14,10 @@ sh ./install.sh -c nightly -f
 nats
 ```
 
+If testing changes before pushing, just `docker cp` the script into a running
+image, leaving it as clean and free of other supporting changes as possible.
+
+
 ## Results
 
 ### Alpine
