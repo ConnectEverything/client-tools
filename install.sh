@@ -213,13 +213,20 @@ check_have_external_commands() {
   considered_list="${considered_list} openssl"
 
   for cmd in sha256sum gsha256sum; do
-    if have_command "$cmd" && "$cmd" --help | grep -qs -- --check ; then
+    # Busybox has -c but not --check, and emits to stderr on --help
+    # It doesn't have a binary-mode flag, so we'll handle that next.
+    if have_command "$cmd" && "$cmd" --help 2>&1 | grep -qs -- --check ; then
       eval "checksum_one_binary() { local cs; cs=\"\$(${cmd} --binary \"\$1\")\"; printf '%s\n' \"\${cs%% *}\"; }"
       note "using $cmd for checksum verification"
       return
     fi
     considered_list="${considered_list} $cmd"
   done
+  if have_command sha256sum && sha256sum --help 2>&1 | grep -q -- -c ; then
+    checksum_one_binary() { cs="$(sha256sum < "$1")"; printf '%s\n' "${cs%% *}"; }
+    note "using sha256sum (BusyBox-ish) for checksum verification"
+    return
+  fi
 
   for cmd in shasum gshasum; do
     if have_command "$cmd" && "$cmd" --help | grep -qs -- '--algorithm.*256' ; then
