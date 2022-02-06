@@ -7,11 +7,12 @@ curl -fSs https://get-nats.io/install.sh | sh
 
 This git repository holds build scripts and installers for client tools, as a
 unified approach replacing the old nsc+ngs+nats installers.
+(For now, we do not install ngs, per instruction from Derek.)
 
 The nsc installer for open source remains in place.
 
 Our goal is to create assets with a reliable installer, following one of two
-channels: "nightles", "stable".
+channels: "nightly", "stable".
 
 Our model: a "channels" file in this repository, defining the two, where the
 "stable" needs to be edited when we want to cut a new stable release, and a
@@ -45,6 +46,10 @@ language makes sense and we can do more.
 * <https://developers.cloudflare.com/pages/framework-guides/deploy-anything>
 * <https://developers.cloudflare.com/pages/platform/build-configuration>
 
+### View Deployment Status
+
+Visit <https://dash.cloudflare.com/32578e55e8e251552382924d4855e414/pages/view/nats-tools>
+
 
 ## Deploy on: cron
 
@@ -75,6 +80,10 @@ We include `SHA256SUMS-${YYYYMMDD}.txt` and `COMMITS-${YYYYMMDD}.txt` as
 assets for each nightly build.  We expect the installer to use the former.
 Nothing uses the COMMITS file (yet); it's simply a record of what git commit
 each tool repo was at, when that nightly build was made.
+
+### View Deployment Status
+
+Visit <https://github.com/ConnectEverything/client-tools/actions/workflows/nightly.yaml>
 
 
 ## CloudFlare Workers Site
@@ -148,6 +157,16 @@ chmod -v +x ./install.sh
 The channel is persisted on disk locally and future runs will remain in the
 same channel.
 
+### Monitoring
+
+We have monitoring in Checkly which retrieves the
+<https://get-nats.io/current-nightly> URL and checks that it's "not too old",
+so if we lose more than a couple of builds then alerts will fire and let us
+know.
+
+If it hasn't been recreated, then the monitoring history should be visible at:
+<https://app.checklyhq.com/checks/305ea176-b06d-436a-8d8f-f49f53168ed7/>
+
 
 ## Installer API
 
@@ -218,5 +237,5 @@ combination, and then `URLDIR_{channel}_{toolname}`.
 
 The installer should fetch both the zipfile and the checksums file from that
 URL directory (separate with `/`) and then verify the zipfile, before
-installing hte location as makes sense for this platform.
+installing to a location which makes sense for this platform.
 
