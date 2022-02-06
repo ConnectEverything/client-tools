@@ -30,6 +30,7 @@ set -eu
 #  2. A  `curl`   command (to download files)
 #  3. An `unzip`  command (to extract content from .zip files)
 #  4. A  `mktemp` command (to stage a downloaded zip-file)
+#  5. A tool to verify checksums; any of: openssl, shasum, sha256sum, etc
 #
 # We do not use JSON because we can't depend upon any particular tools for
 # parsing it for channel updates.
@@ -180,19 +181,87 @@ parse_options() {
   fi
 }
 
+have_command() { command -v "$1" >/dev/null; }
+
 check_have_external_commands() {
   local cmd
+  local considered_list=''
 
   # Only those commands which take --help :
   for cmd in curl unzip
   do
-    command -v "$cmd" >/dev/null || die "missing command: $cmd"
+    have_command "$cmd" || die "missing command: $cmd"
   done
 
   # Our invocation of mktemp has to handle multiple variants; if that's not
   # installed, let it fail later.
   # PORTABILITY ISSUE: WINDOWS?
   test -e /dev/stdin || die "missing device /dev/stdin"
+
+  # After this point, we exit as soon as we find a valid means to verify a
+  # checksums file.
+  # The --ignore-missing flag to sha256sum and friends is _fairly_ portable,
+  # but we always know exactly which file we want and we need the framework
+  # to support other checker commands, so we always extract the entry from
+  # the checksums file and individually check it.
+
+  if have_command openssl; then
+    checksum_one_binary() { local cs; cs="$(openssl dgst -r -sha256 -- "$1")"; printf '%s\n' "${cs%% *}"; }
+    note "using openssl for checksum verification"
+    return
+  fi
+  considered_list="${considered_list} openssl"
+
+  for cmd in sha256sum gsha256sum; do
+    if have_command "$cmd" && "$cmd" --help | grep -qs -- --check ; then
+      eval "checksum_one_binary() { local cs; cs=\"\$(${cmd} --binary \"\$1\")\"; printf '%s\n' \"\${cs%% *}\"; }"
+      note "using $cmd for checksum verification"
+      return
+    fi
+    considered_list="${considered_list} $cmd"
+  done
+
+  for cmd in shasum gshasum; do
+    if have_command "$cmd" && "$cmd" --help | grep -qs -- '--algorithm.*256' ; then
+      eval "checksum_one_binary() { local cs; cs=\"\$(${cmd} --algorithm 256 --binary \"\$1\")\"; printf '%s\n' \"\${cs%% *}\"; }"
+      note "using $cmd for checksum verification"
+      return
+    fi
+    considered_list="${considered_list} $cmd"
+  done
+
+  if have_command sha256; then
+    # BSDish
+    checksum_one_binary() { sha256 -q "$1"; }
+    note "using sha256 for checksum verification"
+    return
+  fi
+  considered_list="${considered_list} sha256"
+
+  if have_command digest; then
+    # Certain SVR4 heritage systems; but do we even support these?
+    checksum_one_binary() { digest -a sha256 "$1"; }
+    note "using digest(1) for checksum verification"
+    return
+  fi
+  considered_list="${considered_list} digest"
+
+  note "looked for:$considered_list"
+  die "unable to find a means to verify checksums; please report this"
+}
+
+checksum_for_file_entry() {
+  local sumfile="${1:?need a checksum file to extract from}"
+  local entryname="${2:?need a filename to extract from checksum file}"
+  local needle found
+  # our entries will be "safe" for regular expressions, except for . being a metacharacter
+  needle="$(printf '%s\n' "$entryname" | sed 's/\./\\./')"
+  found="$(sed -ne "s/ .${needle}\$//p" < "$sumfile")"
+  if [ -n "$found" ]; then
+    printf '%s\n' "$found"
+    return 0
+  fi
+  die "failed to find entry for '${entryname}' in '${sumfile}'"
 }
 
 normalized_ostype() {
@@ -277,15 +346,6 @@ normalized_arch() {
   else
     die "Unhandled architecture '$narch', use -a flag to select a supported arch"
   fi
-}
-
-exe_filename_per_os() {
-  # FIXME
-  local fn="$NSC_BINARY_BASENAME"
-  case "$(normalized_ostype)" in
-    (windows) fn="${fn}.exe" ;;
-  esac
-  printf '%s\n' "$fn"
 }
 
 curl_cmd() {
@@ -495,7 +555,7 @@ expand_config_value() {
 # SIDE EFFECT: sets $INSTALL_FILES
 fetch_and_validate_files() {
   local tool varfile unzip_dir
-  local vars here
+  local vars here expected_cs local_cs
   here="$(pwd)"
   cd "$WORK_DIR"
 
@@ -515,15 +575,25 @@ fetch_and_validate_files() {
       curl_cmd --progress-bar --fail --location \
         --output "./$zipfile" "${urldir%/}/$zipfile" \
         --output "./$checksumfile" "${urldir%/}/$checksumfile"
-      note "FIXME: need to validate checksums in $checksumfile"
+      # NB: we are currently hard-coding an assumption of SHA256.
+      expected_cs="$(checksum_for_file_entry "$checksumfile" "$zipfile")"
+      local_cs="$(checksum_one_binary "$zipfile")"
+      if [ "$expected_cs" = "$local_cs" ]; then
+        note "checksum match: $expected_cs *$zipfile"
+      else
+        note "*** CHECKSUM FAILURE ***"
+        note "file: $zipfile"
+        note "expected SHA256: $expected_cs"
+        note "   found SHA256: $local_cs"
+        die "aborting rather than install corrupted file; please report this"
+      fi
     else
       curl_cmd --progress-bar --fail --location \
         --output "./$zipfile" "${urldir%/}/$zipfile"
+      note "!!! no checksum file available !!!"
     fi
 
     unzip -j -d "$unzip_dir" "./$zipfile"
-
-    # FIXME: any other validation here
 
     INSTALL_FILES="${INSTALL_FILES}${INSTALL_FILES:+ }$WORK_DIR/$unzip_dir/$executable"
 
