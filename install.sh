@@ -187,7 +187,9 @@ check_have_external_commands() {
   local cmd
   local considered_list=''
 
-  # Only those commands which take --help :
+  # These are so essential we fail without them.
+  # nb: xargs is part of POSIX and should always be available,
+  #     but Fedora docker images omit it, but we worked around its absence
   for cmd in curl unzip
   do
     have_command "$cmd" || die "missing command: $cmd"
@@ -425,8 +427,19 @@ fetch_and_parse_channels() {
   [ -f "$chanfile" ] || die "missing a channels file"
 
   known="$WORK_DIR/known-channels"
-  grab_channelfile_line CHANNELS | xargs -n 1 > "$known"
-  count="$(wc -l < "$known" | xargs)"
+  if have_command xargs; then
+    grab_channelfile_line CHANNELS | xargs -n 1 > "$known"
+    count="$(wc -l < "$known" | xargs)"
+  else
+    # xargs is part of POSIX and should always be present in supported environments,
+    # but Fedora removes it in their base Docker image and ... that worries me.
+    # But since xargs is only used here, we can work around it.
+    # Since all traditional systems will have xargs, we will assume a modern sed
+    # which works for this invocation.
+    # We'll hope that this wc(1) is well-behaved around whitespace when reading stdin.
+    grab_channelfile_line CHANNELS | sed 's/[ \t]/\n/g' | grep . > "$known"
+    count="$(wc -l < "$known")"
+  fi
   if [ "$count" -eq 0 ]; then
     die "unable to parse any channels from '${chan_origin}'"
   fi
