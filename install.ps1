@@ -58,7 +58,6 @@ Function Read-ArchiveFolderNameFromUrl($Url) {
 	return $temp.Substring(0, $at);
 }
 
-
 Function Format-EndWithBackslash($s) {
 	if ($s.EndsWith("\")){
 		return $s
