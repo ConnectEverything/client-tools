@@ -4,6 +4,9 @@
 install.sh
 synadia-nats-channels.conf
 
+zsh.complete.nats
+zshrc
+
 # This _redirects file is documented at:
 # <https://developers.cloudflare.com/pages/platform/redirects>
 

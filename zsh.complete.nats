@@ -1,0 +1,113 @@
+#compdef nats -value-,NATS_CONTEXT,-default-
+
+# Recommendation: place NATS_CONTEXT into your fake-parameters zstyle
+#
+# Eg:
+#   zstyle ':completion:*' fake-parameters \
+#     AWS_PROFILE DOCKER_CONTEXT NATS_CONTEXT
+#
+
+local curcontext="$curcontext" state line expl cmdword
+local -a nats_contexts nats_commands nats_sub nats_flags
+local -A nats_decorate_flags_desc nats_decorate_flags_next nats_decorate_flags_mutex
+
+nats_contexts=( "${XDG_CONFIG_HOME:-$HOME/.config}/nats/context"/*(:t:r) )
+
+case "$service" in
+  *,NATS_CONTEXT,*)
+    _wanted nats-contexts expl 'nats contexts' compadd "$@" -- "${nats_contexts[@]}"
+    return 0
+    ;;
+esac
+
+nats_decorate_flags_desc=(
+	[context]='NATS user context'
+	[tlscert]='TLS client auth public certificate'
+	[tlskey]='TLS client auth private key'
+	[tlsca]='TLS CA bundle to verify server cert'
+	[creds]='NATS credentials file to use for authentication'
+	[nkey]='filename containing NKey private key'
+	[user]='NATS username to authenticate as'
+	[password]='Password for NATS user'
+	[trace]='Trace API interactions'
+	[server]='NATS server URL to connect to'
+	[timeout]='time to wait for responses from NATS'
+
+	# common sub-command flags
+	[yaml]='Produce YAML format output'
+	[json]='Produce JSON format output'
+)
+nats_decorate_flags_mutex=(
+	[server]='"(--server -s)"{-s,--server=}'
+)
+nats_decorate_flags_next=(
+	[tlscert]='_files' [tlskey]='_files' [tlsca]='_files'
+	[creds]='_files' [nkey]='_files'
+	[user]=' ' [password]=' '
+	[server]=' '
+	[timeout]=' '
+	[context]='($nats_contexts)'
+)
+
+# We populate a complete set first, so that even if we don't have more details below,
+# we can still tab-complete it; it will just be missing some data
+nats_commands=( $(${words[1]} --completion-bash ${words[1]}) )
+
+# Most flags can appear anywhere; this is not a git-style "top command flags"
+# vs "subcommand flags", but instead "one pool of flags which gains extra
+# entries for some subcommands".
+nats_flags=( $(${words[1]} --completion-bash ${words[1]} --) )
+_nats_decorate_flags() {
+  #zle -M "decorating ..."; zle -R
+  local flag directive
+  local -a expanded
+  for flag in "${(@k)nats_decorate_flags_desc}"; do
+    (( nats_flags[(I)--$flag] )) || continue
+    directive=''
+    if ! (( $+nats_decorate_flags_mutex[$flag] )); then
+      directive="--$flag"
+      if (( $+nats_decorate_flags_next[$flag] )); then
+        directive+="="
+      fi
+    fi
+    directive+="[${nats_decorate_flags_desc[$flag]}]:${nats_decorate_flags_desc[$flag]}"
+    if (( $+nats_decorate_flags_next[$flag] )); then
+      directive+=":${nats_decorate_flags_next[$flag]}"
+    fi
+    if (( $+nats_decorate_flags_mutex[$flag] )); then
+      # This is safe because _we_ control all inputs to the eval, nothing comes from the command
+      eval "expanded=(${nats_decorate_flags_mutex[$flag]})"
+      nats_flags[(I)--$flag]=(${^expanded}"$directive")
+    else
+      nats_flags[(I)--$flag]="$directive"
+    fi
+  done
+}
+
+_nats_decorate_flags
+
+cmdword="${words[1]}"
+
+_arguments -C \
+  "${nats_flags[@]}" \
+  '(-): :->commands' \
+  '(-)*:: :->after-command' && return
+
+case "$state" in
+(commands)
+  _describe -t nats-commands 'nats commands' nats_commands
+  return
+  ;;
+(after-command)
+  curcontext=${curcontext%:*:*}:nats-$words[1]:
+  nats_sub=( $("$cmdword" --completion-bash "${words[@]}") )
+  if [[ ${#nats_sub} -eq 0 ]]; then
+    # terminal
+    nats_flags=( $("$cmdword" --completion-bash "${words[@]}" --) )
+    _nats_decorate_flags
+    _arguments -C "${nats_flags[@]}" '(-): :->commands' '(-)*:: :->after-command' && return
+  else
+    _describe -t nats-sub-commands 'nats sub-commands' nats_sub
+  fi
+  ;;
+esac

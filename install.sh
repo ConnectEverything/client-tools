@@ -73,6 +73,9 @@ readonly SUPPORTED_OSTYPES="linux darwin freebsd windows"
 readonly DEFAULT_BINARY_INSTALL_DIR="$HOME/.local/bin"
 readonly DEFAULT_NATS_CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/nats"
 
+readonly COMPLETION_ZSH_NATS_URL='https://get-nats.io/zsh.complete.nats'
+readonly ZSH_EXTRA_SETUP_URL='https://get-nats.io/zshrc'
+
 ### END OF CONFIGURATION ###
 
 progname="$(basename "$0" .sh)"
@@ -108,6 +111,8 @@ main() {
   install_files
 
   store_channel
+
+  write_completions
 
   show_instructions
 }
@@ -675,9 +680,40 @@ install_files() {
   echo >&2
 }
 
+# SIDE EFFECT: those of write_completions_zszh
+write_completions() {
+  write_completions_zsh
+  # need to write bash ones
+}
+
+# SIDE EFFECT: sets $WROTE_COMPLETION_ZSH
+write_completions_zsh() {
+  WROTE_COMPLETION_ZSH=''
+  [ -f "$HOME/.zshrc" ] || return 0
+  local site_dir
+  site_dir="$(zsh -fc 'print -r -- ${fpath[(r)*/site-functions]}')"
+  if ! [ -n "$site_dir" ]; then
+    note "zsh: completions: no site-functions dir found, skipping"
+    return 0
+  fi
+  if ! [ -w "$site_dir" ]; then
+    note "zsh: completions: $site_dir not writeable, not installing"
+    note "zsh: if you have a personal zsh functions dir, try:"
+    echo >&2
+    printf >&2 '  curl -O FUNCS_DIR/_nats %s\n' "$COMPLETION_ZSH_NATS_URL"
+    return 0
+  fi
+
+  # Ideally, we'd have a signature for this.
+  curl -O "$site_dir/_nats" "$COMPLETION_ZSH_NATS_URL"
+  chmod 0755 "$site_dir/_nats"
+  WROTE_COMPLETION_ZSH="$site_dir/_nats"
+}
+
 show_instructions() {
   if dir_is_in_PATH "$opt_install_dir"; then
     note "installation dir '${opt_install_dir}' already in PATH"
+    show_instructions_completion
     note "all done"
     return 0
   fi
@@ -704,6 +740,28 @@ Zsh Example:
 EOOTHER
 
   esac
+
+  show_instructions_completion
+}
+
+show_instructions_completion() {
+  show_instructions_completion_zsh
+}
+
+show_instructions_completion_zsh() {
+  if [ -n "$WROTE_COMPLETION_ZSH" ]; then
+    cat <<EOAUTOLOAD
+For zsh, a completion function for nats has been installed.
+If you already have autoloading from fpath setup, you need do nothing more.
+Otherwise:
+
+  echo 'autoload _nats' >> ~/.zshrc
+EOAUTOLOAD
+  fi
+
+  echo
+  echo "Also take a look at: ${ZSH_EXTRA_SETUP_URL}"
+  echo
 }
 
 extract_previous_channel() {
