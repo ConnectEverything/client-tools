@@ -690,6 +690,7 @@ write_completions() {
 write_completions_zsh() {
   WROTE_COMPLETION_ZSH=''
   [ -f "$HOME/.zshrc" ] || return 0
+  have_command zsh || return 0
   local site_dir
   site_dir="$(zsh -fc 'print -r -- ${fpath[(r)*/site-functions]}')"
   if ! [ -n "$site_dir" ]; then
@@ -701,6 +702,7 @@ write_completions_zsh() {
     note "zsh: if you have a personal zsh functions dir, try:"
     echo >&2
     printf >&2 '  curl -O FUNCS_DIR/_nats %s\n' "$COMPLETION_ZSH_NATS_URL"
+    echo >&2
     return 0
   fi
 
@@ -713,6 +715,7 @@ write_completions_zsh() {
 show_instructions() {
   if dir_is_in_PATH "$opt_install_dir"; then
     note "installation dir '${opt_install_dir}' already in PATH"
+    echo
     show_instructions_completion
     note "all done"
     return 0
@@ -757,9 +760,9 @@ Otherwise:
 
   echo 'autoload _nats' >> ~/.zshrc
 EOAUTOLOAD
+    echo
   fi
 
-  echo
   echo "Also take a look at: ${ZSH_EXTRA_SETUP_URL}"
   echo
 }
