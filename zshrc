@@ -27,6 +27,12 @@ zmodload zsh/parameter   # $dirstack, $commands, $functions
 #   autoload _nats
 #
 # If you already setup autoloading for all entries, then you're fine.
+#
+# Almost all modern zsh installs will enable the completion system for you,
+# but if not in your setup, then:
+#
+#   autoload compinit && compinit
+#
 
 # Next: tab-completing the name of the variable "NATS_CONTEXT"
 #
