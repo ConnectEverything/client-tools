@@ -14,74 +14,66 @@
 #Requires -RunAsAdministrator
 
 $ErrorActionPreference = 'Stop'
-$ConfFile = "synadia-nats-channels.conf"
-$ConfFileUrl = "https://get-nats.io/$ConfFile"
 $CurrentNightlyUrl = "https://get-nats.io/current-nightly"
+$PlatformsUrl = "https://get-nats.io/synadia-nats-platforms.json"
+$NATSDir = "NATS"
 $OSInfo = "windows-amd64"
 $Stable = "stable"
-$StableLtr = "s"
 $Nightly = "nightly"
-$NightlyLtr = "n"
-$NscApp = "nsc"
-$CliApp = "nats"
+$NscTool = "nsc"
+$NatsTool = "nats"
 $NscExe = "nsc.exe"
-$CliExe = "nats.exe"
+$NatsExe = "nats.exe"
 $NscZip = "nsc.zip"
-$CliZip = "nats.zip"
-$NatsDir = "NATS"
-$CliZipFolder = "nats-%VERSIONNOV%-$OSInfo"
+$NatsZip = "nats.zip"
+$NatsZipFolder = "nats-%VERSIONNOV%-$OSInfo"
 
 # ----------------------------------------------------------------------------------------------------
 # Functions
 # ----------------------------------------------------------------------------------------------------
-Function Get-Property($RawConf, $Pattern) {
-	$p = [string]($RawConf -split "`r?`n" | Select-String -Pattern $Pattern -CaseSensitive -SimpleMatch)
-	$i = $p.IndexOf("=")
-	return $p.Substring($i + 1)
-}
-
-$_currentNightly = "" # lazy loaded
-Function Get-Version($RawConf, $Kind, $App) {
-	if ($kind -eq $Nightly) {
+Function Read-NightlyVersion() {
+	if (!$_currentNightly) {
 		$temp = [string](Invoke-WebRequest -Uri $CurrentNightlyUrl)
-		$_currentNightly = $temp.Substring(0, 8)
-		return $_currentNightly
+		$_currentNightly = $temp.Split("`r?`n")[0]
 	}
-	else
-	{
-		return Get-Property $RawConf "VERSION_${Kind}_${App}"
-	}
+	return $_currentNightly
 }
 
-Function Get-NoVVersion($Ver) {
-	if ( $Ver.StartsWith("v") ) {
-		return $ver.Substring(1)
+# Example Url for Read From Url "https://github.com/nats-io/natscli/releases/download/v0.0.28/nats-0.0.28-windows-386.zip"
+Function Read-VersionFromUrl($Url) {
+	$at = $Url.Indexof("download/")
+	$temp = $Url.Substring($at + 9)
+	$at = $temp.Indexof("/")
+	$temp = $temp.Substring(0, $at);
+	if ($temp.StartsWith("v")) {
+		return $temp
 	}
-	return $Ver
+	return "v$temp"
 }
 
-Function Get-ZipUrl($RawConf, $Kind, $App, $Ver, $VerNoV) {
-	$UrlDir = Get-Property $RawConf "URLDIR_${Kind}_${App}"
-	$Zip = Get-Property $RawConf "ZIPFILE_${Kind}_${App}"
-	$Zip = $Zip.Replace("%OSNAME%-%GOARCH%", $OSInfo).Replace("%VERSIONNOV%", $VerNoV)
-	return $UrlDir.Replace("%VERSIONTAG%", $Ver) + $Zip
+Function Read-ArchiveFolderNameFromUrl($Url) {
+	$at = $Url.LastIndexOf("/")
+	$temp = $Url.Substring($at + 1)
+	$at = $temp.LastIndexOf(".zip")
+	return $temp.Substring(0, $at);
 }
 
-Function Get-EnsureEndsWithBackslash($s) {
+
+Function Format-EndWithBackslash($s) {
 	if ($s.EndsWith("\")){
 		return $s
 	}
 	return $s + "\"
 }
 
-Function Get-EnsureDoesntEndWithBackslash($s) {
+Function Format-DoesntEndWithBackslash($s) {
 	if ($s.EndsWith("\")){
 		return $s.Substring(0, $s.Length - 1)
 	}
 	return $s
 }
 
-Function Get-Folder() {
+Function Select-Folder() {
 	[void] [System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms')
 	$FolderBrowserDialog = New-Object System.Windows.Forms.FolderBrowserDialog
 	$FolderBrowserDialog.RootFolder = 'MyComputer'
@@ -89,13 +81,13 @@ Function Get-Folder() {
 	return $FolderBrowserDialog.SelectedPath
 }
 
-Function Invoke-Backup($BinDir, $App, $ExePath) {
+Function Invoke-Backup($BinDir, $Tool, $ExePath) {
 	if ( Test-Path $ExePath )
 	{
-		Write-Host "Backing up existing $App executable..."
+		Write-Host "Backing up existing $Tool executable..."
 		for($i = 1; $i -lt 100; $i++) # I give up after 99 tries
 		{
-			$nn = "$BinDir$App-" + (Get-Date -Format "yyyyMMdd") + "-backup$i.exe"
+			$nn = "$BinDir$Tool-" + (Get-Date -Format "yyyyMMdd") + "-backup$i.exe"
 			if (!(Test-Path $nn))
 			{
 				Rename-Item -Path $ExePath -NewName $nn
@@ -111,23 +103,49 @@ Function Invoke-Backup($BinDir, $App, $ExePath) {
 # Execution
 # ----------------------------------------------------------------------------------------------------
 # They get to pick the folder given a default
-$tempDir = (Get-EnsureEndsWithBackslash $Env:ProgramFiles) + $NatsDir
+$tempDir = (Format-EndWithBackslash $Env:ProgramFiles) + $NATSDir
 $opt0 = New-Object System.Management.Automation.Host.ChoiceDescription "&Default Location","Default Location is $tempDir"
 $opt1 = New-Object System.Management.Automation.Host.ChoiceDescription "&Choose Location","Choose your location."
 $options = [System.Management.Automation.Host.ChoiceDescription[]]($opt0, $opt1)
 $result = $host.ui.PromptForChoice("Installation Location", "Where will the programs be installed? Default Location is $tempDir", $options, 0)
 if ($result -eq 1) {
-	$tempDir = Get-Folder
+	$tempDir = Select-Folder
 	if (!$tempDir) {
 		Write-Host "You must pick a directory. Exiting"
 		Exit -1
 	}
 }
-$binDir = Get-EnsureEndsWithBackslash $tempDir
-$binDirNoSlash = Get-EnsureDoesntEndWithBackslash $binDir
+$binDir = Format-EndWithBackslash $tempDir
+$binDirNoSlash = Format-DoesntEndWithBackslash $binDir
 if ( !(Test-Path $binDirNoSlash) ) {
 	New-Item $binDirNoSlash -ItemType Directory | Out-Null
 }
+
+# some local variables now that I have $binDir
+$nscExePath = $binDir + $NscExe
+$natsExePath = $binDir + $NatsExe
+$nscZipLocal =  $binDir + $NscZip
+$natsZipLocal =  $binDir + $NatsZip
+
+# $channel Have the user pick which type of channel they want, i.e. stable or nightly. Get the channel from the conf
+$dataDir = (Format-EndWithBackslash $Env:LOCALAPPDATA) + $NATSDir
+$dataFile = "$dataDir\install-channel.txt"
+$dflt = 0
+if ( Test-Path $dataFile ) {
+	$chn = (Get-Content -Path $dataFile).Split("`r?`n")[0]
+	if ($chn -eq $Nightly) {
+		$dflt = 1
+	}
+}
+$opt0 = New-Object System.Management.Automation.Host.ChoiceDescription "&$Stable","Latest Stable Build."
+$opt1 = New-Object System.Management.Automation.Host.ChoiceDescription "&$Nightly","Current Nightly Build."
+$options = [System.Management.Automation.Host.ChoiceDescription[]]($opt0, $opt1)
+$result = $host.ui.PromptForChoice("$Channel Selection", "Which channel do you want to install?", $options, $dflt)
+switch ($result) {
+	0{$channel = $Stable}
+	1{$channel = $Nightly}
+}
+Write-Host ""
 
 # Add bin dir to path if not already in path
 Write-Host "Ensuring $binDirNoSlash is in the path..."
@@ -138,71 +156,56 @@ if (!(";$Path;".ToLower() -like "*;$binDirNoSlash;*".ToLower())) {
 	$Env:Path += ";$binDirNoSlash"
 }
 
-# some local variables now that I have $binDir
-$nscExePath = $binDir + $NscExe
-$cliExePath = $binDir + $CliExe
-$confFileLocal = $binDir + $ConfFile
-$nscZipLocal =  $binDir + $NscZip
-$cliZipLocal =  $binDir + $CliZip
+Write-Host "Downloading platform info..."
+$json = (Invoke-WebRequest https://get-nats.io/synadia-nats-platforms.json -ContentType "application/json" -UseBasicParsing) | ConvertFrom-Json
+$nscZipUrl = $json.$channel.platforms.$OSInfo.tools.$NscTool.zip_url
+$natsZipUrl = $json.$channel.platforms.$OSInfo.tools.$NatsTool.zip_url
 
-# $kind Have the user pick which type of channel they want, i.e. stable or nightly. Get the channel kinds from the conf
-$opt0 = New-Object System.Management.Automation.Host.ChoiceDescription "&$Stable","Latest Stable Build."
-$opt1 = New-Object System.Management.Automation.Host.ChoiceDescription "&$Nightly","Current Nightly Build."
-$options = [System.Management.Automation.Host.ChoiceDescription[]]($opt0, $opt1)
-$result = $host.ui.PromptForChoice("Build Selection", "What kind of build do you want?", $options, 0)
-switch ($result) {
-	0{$kind = $Stable}
-	1{$kind = $Nightly}
+if ($channel -eq $Nightly) {
+	$verNsc = $verNats = Read-NightlyVersion
+	Write-Host "$NscTool $Nightly version $verNsc"
+	Write-Host "$NatsTool $Nightly version $verNats"
+	$nscZipUrl = $nscZipUrl.Replace("%NIGHTLY%", $verNsc)
+	$natsZipUrl = $natsZipUrl.Replace("%NIGHTLY%", $verNats)
 }
-Write-Host ""
-
-# $rawConf Download and parse channels control file
-Write-Host "Downloading configuration info..."
-Invoke-WebRequest -Uri $ConfFileUrl -OutFile $confFileLocal -UseBasicParsing
-$rawConf = (Get-Content -Path $confFileLocal -Raw) -split "`r?`n"
-
-# $ver / $verNoV Figure out the version number from the conf file
-$verNsc = Get-Version $rawConf $kind $NscApp
-$verCli = Get-Version $rawConf $kind $CliApp
-$verNoVNsc = Get-NoVVersion $verNsc
-$verNoVCli = Get-NoVVersion $verCli
-if ($kind -eq $Nightly) {
-	Write-Host "Nightly version $verNsc"
-}
-else
-{
-	Write-Host "$NscApp version $verNsc"
-	Write-Host "$CliApp version $verCli"
+else {
+	$verNsc = Read-VersionFromUrl $nscZipUrl
+	$verNats = Read-VersionFromUrl $natsZipUrl
+	Write-Host "$NscTool $Stable version $verNsc"
+	Write-Host "$NatsTool $Stable version $verNats"
 }
 
 # Download the zip files
-$nscZipUrl = Get-ZipUrl $rawConf $kind $NscApp $verNsc $verNoVNsc
-$cliZipUrl = Get-ZipUrl $rawConf $kind $CliApp $verCli $verNoVCli
-
 Write-Host "Downloading archive $nscZipUrl..."
 Invoke-WebRequest -Uri $nscZipUrl -OutFile $nscZipLocal -UseBasicParsing
-Write-Host "Downloading archive $cliZipUrl..."
-Invoke-WebRequest -Uri $cliZipUrl -OutFile $cliZipLocal -UseBasicParsing
+Write-Host "Downloading archive $natsZipUrl..."
+Invoke-WebRequest -Uri $natsZipUrl -OutFile $natsZipLocal -UseBasicParsing
 
 # Backup existing versions now that the downloads worked
-Invoke-Backup $binDir $NscApp $nscExePath
-Invoke-Backup $binDir $CliApp $cliExePath
+Invoke-Backup $binDir $NscTool $nscExePath
+Invoke-Backup $binDir $NatsTool $natsExePath
 
-# Nsc: Unzip, Remove Archive
-Write-Host "Installing $NscApp..."
+# nsc: Unzip, Remove Archive
+Write-Host "Installing $NscTool..."
 Expand-Archive -Path $nscZipLocal -DestinationPath $binDir
 Remove-Item $nscZipLocal
 
-# Cli: Unzip, stable:(move exe from folder then remove folder), Remove Archive 
-Write-Host "Installing $CliApp..."
-Expand-Archive -Path $cliZipLocal -DestinationPath $binDir -Force
-if ($kind -eq $Stable) {
-	$cliZipFolderLocal = $binDir + $CliZipFolder.Replace("%VERSIONNOV%", $verNoVCli)
-	Move-Item -Path "$cliZipFolderLocal\$CliExe" -Destination "$binDir$CliExe"
-	Remove-Item "$cliZipFolderLocal\*"
-	Remove-Item $cliZipFolderLocal
+# nats: Unzip, stable:(move exe from folder then remove folder), Remove Archive 
+Write-Host "Installing $NatsTool..."
+Expand-Archive -Path $natsZipLocal -DestinationPath $binDir -Force
+if ($channel -eq $Stable) {
+	$natsZipFolderLocal = $binDir + (Read-ArchiveFolderNameFromUrl $natsZipUrl)
+	Move-Item -Path "$natsZipFolderLocal\$NatsExe" -Destination "$binDir$NatsExe"
+	Remove-Item "$natsZipFolderLocal\*"
+	Remove-Item $natsZipFolderLocal
 }
-Remove-Item $cliZipLocal
+Remove-Item $natsZipLocal
 
-# Cleanup Conf File
-Remove-Item $confFileLocal
+# write the install-channel.txt file
+Write-Host "Remembering the installed channel choice..."
+if ( !(Test-Path $dataDir) ) {
+	New-Item $dataDir -ItemType Directory | Out-Null
+}
+"$channel" | Out-File -FilePath $dataFile
+
+Write-Host "Done!`r`n"
