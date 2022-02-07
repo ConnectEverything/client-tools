@@ -22,6 +22,7 @@ explicit action.
 The installer has to be able to work with minimal dependencies, so the
 channels file does not use JSON.  Instead, everything is KEY=VALUE, one per
 line, as straight shell (but not sourced as such, for security reasons).
+We do make JSON files too, for ease of use by other installers.
 
 To handle synchronizing the time of the nightly with availability, and not
 pointing to invalid nightlies after a failed build, we publish a simple
@@ -34,6 +35,7 @@ The script `cdn-site-build` is run by CloudFlare to build content to
 include as the static site contents.  That script uses `cdn-files.txt` to list
 which files from this repo to make available.  It's deliberately very simple,
 no renaming, no processing, just copying into a new tree.
+It does invoke `make-json-files` for some extra work though.
 
 The glue is that CF is told
  1. run this command
@@ -191,7 +193,7 @@ the level of normalization to do in creating something better for tools.  As
 long as interpolation still needs to happen in the results, we probably
 shouldn't expand it too much.  We can change the interpolation markup in the
 new file to whatever is easiest to handle in the programming language
-involved.
+involved.  **See below, under "Experimental JSON Files"**
 
 To make new data formats for the channels information, add the conversion into
 the `cdn-site-build` script so that the CF site builder will automatically
@@ -238,4 +240,123 @@ combination, and then `URLDIR_{channel}_{toolname}`.
 The installer should fetch both the zipfile and the checksums file from that
 URL directory (separate with `/`) and then verify the zipfile, before
 installing to a location which makes sense for this platform.
+
+
+## Experimental JSON Files
+
+The site build will invoke `make-json-files`.  
+This first experimental version was thrown together quickly in bash, using
+logic from `install.sh` but taking advantage of arrays.
+It's a bit slow, repeatedly invoking `jq` to slowly build a data string to
+write out.
+This can be rewritten and adjusted as we figure out what's needed.
+
+We make two files: one is a straight reformatting of the current data, to be
+expanded in the same way, without needing janky parsing of files.  The other
+expands the data out so that for the non-nightly case there are direct URLs
+which can be used, and in the nightly case there's a single substitution
+needed.
+
+### `synadia-nats-channels.json`
+
+<https://get-nats.io/synadia-nats-channels.json>
+
+The `synadia-nats-channels.json` file is a straight restatement of
+`synadia-nats-channels.conf` but in JSON format.
+The result looks something like:
+
+```json
+{
+  "stable": {
+    "nats": {
+      "zipfile": "nats-%VERSIONNOV%-%OSNAME%-%GOARCH%.zip",
+      "checksumfile": "SHA256SUMS",
+      "urldir": "https://github.com/nats-io/natscli/releases/download/%VERSIONTAG%/",
+      "version": "v0.0.28"
+    },
+    "nsc": {
+      "zipfile": "nsc-%OSNAME%-%GOARCH%.zip",
+      "checksumfile": "nsc-checksums.txt",
+      "urldir": "https://github.com/nats-io/nsc/releases/download/%VERSIONTAG%/",
+      "version": "2.6.1"
+    }
+  },
+  "nightly": {
+    "version_url": "https://get-nats.io/current-nightly",
+    "nats": {
+      "zipfile": "nats-%VERSIONNOV%-%OSNAME%-%GOARCH%.zip",
+      "checksumfile": "SHA256SUMS-%VERSIONNOV%.txt",
+      "urldir": "https://get-nats.io/nightly/"
+    },
+    "nsc": {
+      "zipfile": "nsc-%VERSIONNOV%-%OSNAME%-%GOARCH%.zip",
+      "checksumfile": "SHA256SUMS-%VERSIONNOV%.txt",
+      "urldir": "https://get-nats.io/nightly/"
+    }
+  }
+}
+```
+
+### `synadia-nats-platforms.json`
+
+<https://get-nats.io/synadia-nats-platforms.json>
+
+The `synadia-nats-platforms.json` file again has top-level keys of the channel
+name, but then there's a second-level key of `platforms`, which is a map
+containing an entry for each of a pre-canned list of platforms.
+
+For any channel which is not "nightly", the URLs within are absolute and can
+be retrieved as-is.
+For the nightly channel, the direct key (sibling to `platforms`) of
+`version_url` contains the URL documented above, and all the URLs to be
+retrieved contain a single pattern of `%NIGHTLY%` to be replaced.
+
+We can swap out `%NIGHTLY%` with whatever syntax is easiest to work with.
+
+An abbreviated example, keeping only one platform per channel for this README,
+is:
+
+```json
+{
+  "stable": {
+    "platforms": {
+      "darwin-amd64": {
+        "tools": {
+          "nats": {
+            "executable": "nats",
+            "zip_url": "https://github.com/nats-io/natscli/releases/download/v0.0.28/nats-0.0.28-darwin-amd64.zip",
+            "checksum_url": "https://github.com/nats-io/natscli/releases/download/v0.0.28/SHA256SUMS"
+          },
+          "nsc": {
+            "executable": "nsc",
+            "zip_url": "https://github.com/nats-io/nsc/releases/download/2.6.1/nsc-darwin-amd64.zip",
+            "checksum_url": "https://github.com/nats-io/nsc/releases/download/2.6.1/nsc-checksums.txt"
+          }
+        }
+      }
+    }
+  },
+  "nightly": {
+    "version_url": "https://get-nats.io/current-nightly",
+    "platforms": {
+      "windows-arm64": {
+        "tools": {
+          "nats": {
+            "executable": "nats.exe",
+            "zip_url": "https://get-nats.io/nightly/nats-%NIGHTLY%-windows-arm64.zip",
+            "checksum_url": "https://get-nats.io/nightly/SHA256SUMS-%NIGHTLY%.txt"
+          },
+          "nsc": {
+            "executable": "nsc.exe",
+            "zip_url": "https://get-nats.io/nightly/nsc-%NIGHTLY%-windows-arm64.zip",
+            "checksum_url": "https://get-nats.io/nightly/SHA256SUMS-%NIGHTLY%.txt"
+          }
+        }
+      }
+    }
+  }
+}
+```
+
+
 

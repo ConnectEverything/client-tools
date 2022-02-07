@@ -9,6 +9,10 @@ synadia-nats-channels.conf
 
 _redirects
 
+# The file make-json-files will make additional files:
+#  - synadia-nats-channels.json
+#  - synadia-nats-platforms.json
+
 # The file nightlies-serving/wrangler.toml defines "routes" which will be
 # handled by the worker code in that directory.
 # Those will be intercepted by CF and served from the KV store, instead

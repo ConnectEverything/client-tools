@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+progname="$(basename "$0" .sh)"
+note() { printf >&2 '%s: %s\n' "$progname" "$*"; }
+die() { note "$@"; exit 1; }
+
+readonly DEPLOY_DIR="${1:-public}"
+readonly SH_CHANNELS_FILE=synadia-nats-channels.conf
+readonly NIGHTLY_DATE_URL='https://get-nats.io/current-nightly'
+
+# These are the two files we make.
+# The first is a straight reformatting of the .conf to JSON, still requiring expansion.
+# The second is a system keyed by platform.
+readonly OUT_CHANNELS="$DEPLOY_DIR/synadia-nats-channels.json"
+readonly OUT_PLATFORMS="$DEPLOY_DIR/synadia-nats-platforms.json"
+
+readonly -a SUPPORTED_PLATFORMS=(
+      darwin-amd64
+      freebsd-amd64
+      linux-amd64
+      linux-arm6
+      linux-arm64
+      linux-arm7
+      windows-arm6
+      windows-arm64
+)
+readonly -A PLATFORM_EXE_EXTENSION=(
+      [windows-arm6]='exe'
+      [windows-arm64]='exe'
+)
+
+# --------------------------8< End of Config >8---------------------------
+
+# Defining this lets us use grab_channelfile_line unmodified from install.sh
+chanfile="$SH_CHANNELS_FILE"
+chan_origin="$SH_CHANNELS_FILE"
+
+command -v jq >/dev/null || die "missing command: jq"
+
+# From: install.sh {{{
+
+grab_channelfile_line() {
+  local varname="${1:?need a file to get from the channel file}"
+  local t
+  # sed -E is not POSIX, so we're on BREs only
+  t="$(sed -n "s/${varname}[[:space:]]*=[[:space:]]*//p" < "${chanfile:?bug, chanfile not in calling context}")"
+  if [ -n "$t" ]; then
+    printf '%s\n' "$t"
+  else
+    die "missing '${varname}' in ${chan_origin:?}"
+  fi
+}
+
+expand_config_value() {
+  local val="$1"
+  local subst="$2"
+  local replace="$3"
+  local result=""
+  while [ "$val" != "${val#*\%${subst}\%}" ]; do
+    pre="${val%%\%${subst}\%*}"
+    post="${val#*\%${subst}\%}"
+    result="${result}${pre}${replace}"
+    val="$post"
+  done
+  result="${result}${val}"
+  printf '%s\n' "$result"
+}
+
+# From: install.sh }}}
+
+expand_all() {
+  local val="$1"
+  shift
+  local tag lhs rhs
+  for tag; do
+    lhs="${tag%%:*}"
+    rhs="${tag#*:}"
+    val="$(expand_config_value "$val" "$lhs" "$rhs")"
+  done
+  printf '%s\n' "$val"
+}
+
+declare -a all_channels=() all_tools=() expansions=() platform_expands=()
+
+note "Building data (slowly, can be rewritten to Python to be faster)"
+
+all_channels+=($(grab_channelfile_line CHANNELS))
+all_tools+=($(grab_channelfile_line TOOLS))
+
+# jchdata goes into synadia-nats-channels.json
+jchdata='{}'
+# jplatformdata goes into synadia-nats-platforms.json
+jplatformdata='{}'
+
+for channel in "${all_channels[@]}"; do
+  jchannel='{}'
+  case "$channel" in
+    nightly)
+      jchannel="$(jq <<<"$jchannel" --arg U "$NIGHTLY_DATE_URL" '.version_url = $U')"
+      ;;
+  esac
+  jexpanded_channel="$(jq <<<"$jchannel" --arg C "$channel" '.platforms = {}')"
+
+  for tool in "${all_tools[@]}"; do
+    suffix="${channel}_${tool}"
+    version='' zipfile='' checksumfile='' urldir='' executable='' jtool=''
+
+    zipfile="$(grab_channelfile_line "ZIPFILE_${suffix}")"
+    checksumfile="$(grab_channelfile_line "CHECKSUMS_${suffix}")"
+    urldir="$(grab_channelfile_line "URLDIR_${suffix}")"
+    jtool="$(jq -nr --arg Z "$zipfile" --arg C "$checksumfile" --arg U "$urldir" '.zipfile = $Z | .checksumfile = $C | .urldir = $U')"
+
+    expansions=( "TOOLNAME:$tool" "ZIPFILE:$zipfile" "CHECKFILE:$checksumfile")
+
+    case "$channel" in
+      nightly)
+        expansions+=( "VERSIONTAG:%NIGHTLY%" "VERSIONNOV:%NIGHTLY%" )
+        ;;
+      *)
+        version="$(grab_channelfile_line "VERSION_${suffix}")"
+        jtool="$(jq <<<"$jtool" --arg V "$version" '.version = $V')"
+        expansions+=( "VERSIONTAG:$version" "VERSIONNOV:${version#v}" )
+        ;;
+    esac
+
+    jchannel="$(jq <<<"$jchannel" --arg T "$tool" --argjson P "$jtool" '.[$T] = $P')"
+
+    for platform in "${SUPPORTED_PLATFORMS[@]}"; do
+      executable="$tool${PLATFORM_EXE_EXTENSION[$platform]:+.}${PLATFORM_EXE_EXTENSION[$platform]:-}"
+      jexpanded_channel="$(jq <<<"$jexpanded_channel" --arg P "$platform" '.platforms[$P] //= {tools: {}}')"
+      platform_expands=( "${expansions[@]}" "OSNAME:${platform%%-*}" "GOARCH:${platform#*-}" )
+
+      zip_url="$(expand_all "${urldir}${zipfile}" "${platform_expands[@]}")"
+      chk_url="$(expand_all "${urldir}${checksumfile}" "${platform_expands[@]}")"
+      jexpanded_channel="$(jq <<<"$jexpanded_channel" --arg T "$tool" --arg P "$platform" --arg Z "$zip_url" --arg C "$chk_url" --arg E "$executable" \
+        '.platforms[$P].tools[$T] = { executable: $E, zip_url: $Z, checksum_url: $C }')"
+    done
+
+  done
+
+  jchdata="$(jq <<<"$jchdata" --arg C "$channel" --argjson P "$jchannel" '.[$C] = $P')"
+  jplatformdata="$(jq <<<"$jplatformdata" --arg C "$channel" --argjson P "$jexpanded_channel" '.[$C] = $P')"
+done
+
+[[ -d "$DEPLOY_DIR" ]] || mkdir -pv -- "$DEPLOY_DIR"
+note "Writing: $OUT_CHANNELS"
+printf '%s\n' > "$OUT_CHANNELS" "$jchdata"
+note "Writing: $OUT_PLATFORMS"
+printf '%s\n' > "$OUT_PLATFORMS" "$jplatformdata"
+

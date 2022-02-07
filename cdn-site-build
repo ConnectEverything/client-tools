@@ -30,3 +30,5 @@ while read -r fn; do
   fi
   cp -av "$fn" "$td/$fn"
 done < "$DEPLOY_CONF"
+
+"$(dirname "$0")/make-json-files" "$DEPLOY_DIR"
