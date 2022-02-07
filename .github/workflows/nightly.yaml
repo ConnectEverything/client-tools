@@ -1,7 +1,12 @@
 name: Client Tools nightly build
 
 on:
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      nightly-id:
+        description: "ID to use for the build in place of YYYYMMDD"
+        required: true
+        type: string
   schedule:
     - cron: "33 2 * * *"
 
@@ -41,12 +46,24 @@ jobs:
           version: latest
           install-only: true
 
-      - name: Run nightlies build and release tool
-        id: build
+      - name: Run nightlies build-and-release tool
+        id: build-cron
+        if: ${{ github.event_name == 'schedule' }}
         run: |
           ./build-nightlies.sh
         env:
           CLOUDFLARE_AUTH_TOKEN: ${{ secrets.CLOUDFLARE_AUTH_TOKEN }}
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run manual build-and-release tool
+        id: build-manual
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          ./build-nightlies.sh
+        env:
+          CLOUDFLARE_AUTH_TOKEN: ${{ secrets.CLOUDFLARE_AUTH_TOKEN }}
+          GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NIGHTLY_DATE: ${{ github.event.inputs.nightly-id }}
 
