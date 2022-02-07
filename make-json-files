@@ -17,13 +17,18 @@ readonly OUT_PLATFORMS="$DEPLOY_DIR/synadia-nats-platforms.json"
 
 readonly -a SUPPORTED_PLATFORMS=(
       darwin-amd64
+      darwin-arm64
       freebsd-amd64
+      linux-386
       linux-amd64
-      linux-arm6
       linux-arm64
+      linux-arm6
       linux-arm7
-      windows-arm6
+      windows-386
+      windows-amd64
       windows-arm64
+      windows-arm6
+      windows-arm7
 )
 readonly -A PLATFORM_EXE_EXTENSION=(
       [windows-arm6]='exe'
