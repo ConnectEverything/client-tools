@@ -38,25 +38,6 @@ Function Read-NightlyVersion() {
 	return $_currentNightly
 }
 
-# Example Url for Read From Url "https://github.com/nats-io/natscli/releases/download/v0.0.28/nats-0.0.28-windows-386.zip"
-Function Read-VersionFromUrl($Url) {
-	$at = $Url.Indexof("download/")
-	$temp = $Url.Substring($at + 9)
-	$at = $temp.Indexof("/")
-	$temp = $temp.Substring(0, $at);
-	if ($temp.StartsWith("v")) {
-		return $temp
-	}
-	return "v$temp"
-}
-
-Function Read-ArchiveFolderNameFromUrl($Url) {
-	$at = $Url.LastIndexOf("/")
-	$temp = $Url.Substring($at + 1)
-	$at = $temp.LastIndexOf(".zip")
-	return $temp.Substring(0, $at);
-}
-
 Function Format-EndWithBackslash($s) {
 	if ($s.EndsWith("\")){
 		return $s
@@ -167,8 +148,8 @@ if ($channel -eq $Nightly) {
 	$natsZipUrl = $natsZipUrl.Replace("%NIGHTLY%", $verNats)
 }
 else {
-	$verNsc = Read-VersionFromUrl $nscZipUrl
-	$verNats = Read-VersionFromUrl $natsZipUrl
+	$verNsc = $json.$channel.platforms.$OSInfo.tools.$NscTool."version_tag"
+	$verNats = $json.$channel.platforms.$OSInfo.tools.$NatsTool."version_tag"
 	Write-Host "$NscTool $Stable version $verNsc"
 	Write-Host "$NatsTool $Stable version $verNats"
 }
@@ -192,7 +173,8 @@ Remove-Item $nscZipLocal
 Write-Host "Installing $NatsTool..."
 Expand-Archive -Path $natsZipLocal -DestinationPath $binDir -Force
 if ($channel -eq $Stable) {
-	$natsZipFolderLocal = $binDir + (Read-ArchiveFolderNameFromUrl $natsZipUrl)
+	$bareVersion = $json.$channel.platforms.$OSInfo.tools.$NatsTool."version_bare"
+	$natsZipFolderLocal = "$binDir$NatsTool-$bareVersion-$OSInfo"
 	Move-Item -Path "$natsZipFolderLocal\$NatsExe" -Destination "$binDir$NatsExe"
 	Remove-Item "$natsZipFolderLocal\*"
 	Remove-Item $natsZipFolderLocal
