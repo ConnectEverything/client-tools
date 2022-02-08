@@ -101,7 +101,7 @@ expand_all() {
   printf '%s\n' "$val"
 }
 
-declare -a all_channels=() all_tools=() expansions=() platform_expands=()
+declare -a all_channels=() all_tools=() expansions=() platform_expands=() tool_jq=()
 
 note "Building data (slowly, can be rewritten to Python to be faster)"
 
@@ -124,14 +124,18 @@ for channel in "${all_channels[@]}"; do
 
   for tool in "${all_tools[@]}"; do
     suffix="${channel}_${tool}"
-    version='' zipfile='' checksumfile='' urldir='' executable='' jtool=''
+    version='' zipfile='' checksumfile='' urldir='' executable='' jtool='' tool_object=''
 
     zipfile="$(grab_channelfile_line "ZIPFILE_${suffix}")"
     checksumfile="$(grab_channelfile_line "CHECKSUMS_${suffix}")"
     urldir="$(grab_channelfile_line "URLDIR_${suffix}")"
     jtool="$(jq -nr --arg Z "$zipfile" --arg C "$checksumfile" --arg U "$urldir" '.zipfile = $Z | .checksumfile = $C | .urldir = $U')"
 
+    # Directives used to invoke expand_all:
     expansions=( "TOOLNAME:$tool" "ZIPFILE:$zipfile" "CHECKFILE:$checksumfile")
+    # See jexpanded_channel below in the platform loop (for synadia-nats-platforms.json):
+    tool_jq=( --arg T "$tool" )
+    tool_object='executable: $E, zip_url: $Z, checksum_url: $C'
 
     case "$channel" in
       nightly)
@@ -141,6 +145,8 @@ for channel in "${all_channels[@]}"; do
         version="$(grab_channelfile_line "VERSION_${suffix}")"
         jtool="$(jq <<<"$jtool" --arg V "$version" '.version = $V')"
         expansions+=( "VERSIONTAG:$version" "VERSIONNOV:${version#v}" )
+        tool_jq+=( --arg VT "$version" --arg VB "${version#v}" )
+        tool_object="${tool_object}"', version_tag: $VT, version_bare: $VB'
         ;;
     esac
 
@@ -153,8 +159,9 @@ for channel in "${all_channels[@]}"; do
 
       zip_url="$(expand_all "${urldir}${zipfile}" "${platform_expands[@]}")"
       chk_url="$(expand_all "${urldir}${checksumfile}" "${platform_expands[@]}")"
-      jexpanded_channel="$(jq <<<"$jexpanded_channel" --arg T "$tool" --arg P "$platform" --arg Z "$zip_url" --arg C "$chk_url" --arg E "$executable" \
-        '.platforms[$P].tools[$T] = { executable: $E, zip_url: $Z, checksum_url: $C }')"
+      jexpanded_channel="$(jq <<<"$jexpanded_channel" \
+        "${tool_jq[@]}" --arg P "$platform" --arg Z "$zip_url" --arg C "$chk_url" --arg E "$executable" \
+        '.platforms[$P].tools[$T] = '"{ $tool_object }")"
     done
 
   done

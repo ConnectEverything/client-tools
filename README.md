@@ -338,12 +338,16 @@ is:
           "nats": {
             "executable": "nats",
             "zip_url": "https://github.com/nats-io/natscli/releases/download/v0.0.28/nats-0.0.28-darwin-amd64.zip",
-            "checksum_url": "https://github.com/nats-io/natscli/releases/download/v0.0.28/SHA256SUMS"
+            "checksum_url": "https://github.com/nats-io/natscli/releases/download/v0.0.28/SHA256SUMS",
+            "version_tag": "v0.0.28",
+            "version_bare": "0.0.28"
           },
           "nsc": {
             "executable": "nsc",
             "zip_url": "https://github.com/nats-io/nsc/releases/download/2.6.1/nsc-darwin-amd64.zip",
             "checksum_url": "https://github.com/nats-io/nsc/releases/download/2.6.1/nsc-checksums.txt"
+            "version_tag": "2.6.1",
+            "version_bare": "2.6.1"
           }
         }
       }
