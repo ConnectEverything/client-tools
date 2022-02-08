@@ -77,7 +77,7 @@ if (( ${+functions[run-help]} )); then
     unalias run-help
   fi
 
-  if have_cmd nats; then
+  if (( ${+commands[nats]} )); then
     function run-help-nats {
       if [[ $# -eq 0 ]]; then
         nats --help | sed -n '/^Commands/q;p' ; printf '\n=== nats cheat ===\n\n' ; nats cheat
