@@ -62,5 +62,14 @@ Workaround implemented; prior to workaround, Fedora worked after
 
 ### FreeBSD
 
-Currently fails because nsc is not built for FreeBSD.
+```sh
+# run somehow, I have jails I use
+  pkg install curl
+```
+
+Works.
+Unzip is in base system, curl is in Ports.
+If we want to start supporting replacing curl with other tools, then for
+FreeBSD we could use `fetch` in the base system: `fetch -1qao - "$URL"` will
+write the resource found at that URL to standard output.
 
