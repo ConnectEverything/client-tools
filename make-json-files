@@ -1,6 +1,21 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# This is invoked as part of the site deployment, whenever stable channel
+# versions are bumped, and converts synadia-nats-channels.conf into other files
+# in JSON format.
+# The .sh installer is not allowed to rely upon JSON handling being available,
+# and the core config supports that, but other installers should get something
+# saner.
+#
+# This script was written in bash, because as a superset of POSIX sh it let me
+# copy/paste the config extraction and templating functions I'd written and quickly
+# massage data with jq.  But any shell is not an ideal choice and this script is
+# a candidate for being rewritten to another language.  The initial development
+# expediency has given us something which runs "within a couple of seconds"
+# (instead of milliseconds) but which requires comfort with sh+jq which might
+# become a maintenance headache for others.
+
 progname="$(basename "$0" .sh)"
 note() { printf >&2 '%s: %s\n' "$progname" "$*"; }
 die() { note "$@"; exit 1; }

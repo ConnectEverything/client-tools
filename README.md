@@ -6,8 +6,7 @@ curl -fSs https://get-nats.io/install.sh | sh
 ```
 
 This git repository holds build scripts and installers for client tools, as a
-unified approach replacing the old nsc+ngs+nats installers.
-(For now, we do not install ngs, per instruction from Derek.)
+unified approach replacing the old nsc+nats installers.
 
 The nsc installer for open source remains in place.
 
@@ -27,6 +26,20 @@ We do make JSON files too, for ease of use by other installers.
 To handle synchronizing the time of the nightly with availability, and not
 pointing to invalid nightlies after a failed build, we publish a simple
 nightly version file to the CDN too.
+
+
+## Future Work
+
+If recreating this now, I might put the entire site into the KV store,
+carefully making sure the persistent pages never expire out, to have one
+unified approach and lower latencies on deploys.  The split is an
+artifact of how things were developed and results in more complexity
+than is ideal.  It all works and once you get your head around the two
+approaches, it is probably fine, so we're not currently planning to change
+things.
+
+See also Issues opened against this repo; in particular, issue 3 covers
+artifact signing.
 
 
 ## Deploy on: push
@@ -357,6 +370,4 @@ is:
   }
 }
 ```
-
-
 

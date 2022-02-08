@@ -1,6 +1,18 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# This script is invoked by GitHub Actions, per
+#    .github/workflows/nightly.yaml
+# and is invoked each night, or on manual runs.
+# Our execution environment is whatever the `runs-on:` directive in that YAML file says,
+# which at time of initial development was `ubuntu-latest`.
+#
+# Early in execution we do a sanity check with ${NEEDED_COMMANDS[@]} to be sure the
+# environment is suitable; in choosing to pin a version of Ubuntu which rots over time
+# versus asking for the latest and doing sanity checks before proceeding, and since the
+# failure mode is "we miss a build" not "we fail to serve a request", I think this is
+# the most reasonable balance of the trade-offs.
+
 progname="$(basename "$0" .sh)"
 stderr() { printf >&2 '%s: %s\n' "$progname" "$*"; }
 warn() { stderr "$@"; }
@@ -26,6 +38,7 @@ readonly -a NEEDED_COMMANDS=(jq curl zip sha256sum goreleaser)
 # These will be set readonly at the end of parse_options:
 USE_EXISTING_BUILD=0
 : "${NIGHTLY_DATE:=$(date +%Y%m%d)}"
+# NB: monitoring will complain if the date isn't either YYYYMMDD or YYYYMMDD_.*
 
 # We keep nightlies in CF for a limited amount of time, letting CF auto-expire them.
 declare -i NIGHTLY_EXPIRATION_TTL=$(( 14 * 24 * 3600 ))
@@ -49,7 +62,9 @@ Usage: $progname [-d <date>] [-rP]
   -r          reuse existing build
   -P          don't publish (don't need API keys)
 
-The DATE should be in YYYYMMDD format.
+The DATE should be in YYYYMMDD format or, for extra runs on a given day,
+in YYYYMMDD_NNN format.
+If not, then monitoring of published artifacts will complain.
 If publishing, expect the credentials in: \$CLOUDFLARE_AUTH_TOKEN
 EOUSAGE
   exit "$ev"

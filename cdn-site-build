@@ -1,6 +1,15 @@
 #!/bin/sh -eu
 set -eu
 
+# This script is registered as the entry-point for CloudFlare Pages to
+# invoke to build the site.  Do not rename this script without updating
+# CloudFlare.  We deliberately try to keep things simple, to reduce the
+# risk of portability woes as CF update builder environments: we should
+# be able to just stick to the latest release version, always.
+#
+# This script can invoke other tools for more complicated work.
+# This script just copies some files into place.  Simple shell work.
+
 progname="$(basename "$0" .sh)"
 warn() { printf >&2 '%s: %s\n' "$progname" "$*"; }
 die() { warn "$@"; exit 1; }
