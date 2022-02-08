@@ -26,7 +26,6 @@ $NscExe = "nsc.exe"
 $NatsExe = "nats.exe"
 $NscZip = "nsc.zip"
 $NatsZip = "nats.zip"
-$NatsZipFolder = "nats-%VERSIONNOV%-$OSInfo"
 
 # ----------------------------------------------------------------------------------------------------
 # Functions
