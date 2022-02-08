@@ -2,6 +2,7 @@
 # Keep the comment '#' in the first column, our parsing is crude.
 
 install.sh
+install.ps1
 synadia-nats-channels.conf
 
 zsh.complete.nats
