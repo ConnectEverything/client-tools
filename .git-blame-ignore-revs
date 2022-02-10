@@ -1,8 +1,12 @@
 # .git-blame-ignore-revs
 # This file is in the format documented in git-config(1) under fsck.skipList;
 # see git-blame(1) note on the --ignore-revs-file flag.
-# The core git tooling won't use this by default, but you can configure either
-# this repo or your user defaults to set:
-#    blame.ignoreRevsFile = .git-blame-ignore-revs
+# The core git tooling won't use this by default, but you can run this:
+#
+#    git config blame.ignoreRevsFile .git-blame-ignore-revs
+#
+# to enable it for this repo.
+# (Do not set it in ~/.gitconfig, it will cause "git blame" to error out in
+#  repos without such a file).
 #
 69afb4a48c2c0e31931925e9899902e6371c4499
