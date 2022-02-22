@@ -33,7 +33,7 @@ readonly CLOUDFLARE_VARS_FILE='cloudflare.conf'
 readonly HTTP_USER_AGENT='client-tools-builder/0.1 (@philpennock, ConnectEverything)'
 readonly CLOUDFLARE_API_URL='https://api.cloudflare.com/client/v4'
 
-readonly -a NEEDED_COMMANDS=(jq curl zip sha256sum goreleaser)
+readonly -a NEEDED_COMMANDS=(jq curl zip sha256sum goreleaser ssh-keygen cosign)
 
 # These will be set readonly at the end of parse_options:
 USE_EXISTING_BUILD=0
@@ -61,6 +61,7 @@ Usage: $progname [-d <date>] [-rP]
   -d DATE     override date from ${NIGHTLY_DATE@Q}
   -r          reuse existing build
   -P          don't publish (don't need API keys)
+  -S          don't sign (don't need private signing keys)
 
 The DATE should be in YYYYMMDD format or, for extra runs on a given day,
 in YYYYMMDD_NNN format.
@@ -76,12 +77,14 @@ EOUSAGE
 parse_options() {
   local arg OPTIND
   opt_publish=1
-  while getopts ':d:hrP' arg; do
+  opt_sign=1
+  while getopts ':d:hrPS' arg; do
     case "$arg" in
       h) usage 0 ;;
       d) NIGHTLY_DATE="$OPTARG" ;;
       r) USE_EXISTING_BUILD=1 ;;
       P) opt_publish=0 ;;
+      S) opt_sign=0 ;;
       :) die_n "$EX_USAGE" "missing required option for -$OPTARG; see -h for help" ;;
       \?) die_n "$EX_USAGE" "unknown option -$OPTARG; see -h for help" ;;
       *) die_n "$EX_SOFTWARE" "unhandled option -$arg; CODE BUG" ;;
@@ -123,7 +126,7 @@ fetch_one_github_repo() {
     # not the normal case, but handle it during dev
     stderr "update in ${clone_dir@Q} (expect is github:${tool_repo_slugs[$tool]})"
     git -C "$clone_dir" remote update -p
-    git -C "$clone_dir" merge --ff-only @{u}
+    git -C "$clone_dir" merge --ff-only '@{u}'
   else
     stderr "clone github:${tool_repo_slugs[$tool]} -> ${clone_dir@Q}"
     repo_clone_url="https://github.com/${tool_repo_slugs[$tool]}.git"
@@ -145,7 +148,7 @@ fetch_one_github_repo() {
 dist_dir_for_tool() {
   local tool="$1"
   shift
-  local d clone_dir
+  local dist_dir clone_dir
   clone_dir="$(dir_for_tool "$tool")"
 
   dist_dir="$(sed -n 's/dist: *//p' < "${clone_dir}/.goreleaser.yml")"
@@ -176,6 +179,8 @@ build_one_tool() {
 check_have_publish_credentials() {
   local verify label status
   [[ -n "${CLOUDFLARE_AUTH_TOKEN:-}" ]] || die "missing content in \$CLOUDFLARE_AUTH_TOKEN (use -P to skip publish; -h for help)"
+  # Yes, the message to stderr contians a literal dollar-sign, deliberately.
+  # shellcheck disable=SC2016
   stderr 'checking $CLOUDFLARE_AUTH_TOKEN against CF verify end-point'
   label='cloudflare[user/tokens/verify]'
   verify="$(cf_curl -fSs https://api.cloudflare.com/client/v4/user/tokens/verify)" || die "$label failed"
@@ -220,7 +225,62 @@ collect_nightly_zips_of_tool() {
 write_checksums() {
   cd "$(nightly_dir)"
   stderr "writing checksums file(s)"
-  sha256sum -b *.zip > "SHA256SUMS-$NIGHTLY_DATE.txt"
+  sha256sum -b -- *.zip > "SHA256SUMS-$NIGHTLY_DATE.txt"
+}
+
+sign_checksums() {
+  sign_artifact_cosign "SHA256SUMS-$NIGHTLY_DATE.txt"
+  sign_artifact_ssh "SHA256SUMS-$NIGHTLY_DATE.txt"
+}
+
+check_have_signing_keys() {
+  [[ -n "${NIGHTLY_SIGNING_KEY_COSIGN:-}" ]] || die "missing \$NIGHTLY_SIGNING_KEY_COSIGN"
+  [[ -n "${NIGHTLY_SIGNING_KEY_SSH:-}" ]] || die "missing \$NIGHTLY_SIGNING_KEY_SSH"
+  # Assume that there's no passphrase on the cosign key
+  # nb: any place we'd store the key is the same place we'd store the passphrase, so having a passphrase is a false sense of security
+  : "${COSIGN_PASSWORD=}"
+  export COSIGN_PASSWORD
+}
+
+# SIDE-EFFECT: sets $SIGNING_KEYS_DIR
+# SIDE-EFFECT: sets $EXTRACTED_SIGNING_KEYS
+extract_signing_keys() {
+  if [[ -n "${EXTRACTED_SIGNING_KEYS:-}" ]]; then return 0; fi
+  # While we try to be very careful to delete the keys as soon as done, I'm
+  # uncomfortable with having them under the current dir, which is the area
+  # where every file at the end will be uploaded to CloudFlare.
+  # It worked, safely, for initial development but it's too fragile as a
+  # maintenance constraint, where one mistake could upload.
+  # So we make sure that the private keys dir is outside the upload area.
+  SIGNING_KEYS_DIR="$start_cwd/private-keys"
+  mkdir -m 0700 "$SIGNING_KEYS_DIR"
+  cp "$start_cwd"/public-keys/* "$SIGNING_KEYS_DIR/./"
+  touch       "$SIGNING_KEYS_DIR/nightlies-ssh-signing" "$SIGNING_KEYS_DIR/nightlies-cosign.key"
+  chmod 0600  "$SIGNING_KEYS_DIR/nightlies-ssh-signing" "$SIGNING_KEYS_DIR/nightlies-cosign.key"
+  printf >> "$SIGNING_KEYS_DIR/nightlies-ssh-signing" '%s\n' "$NIGHTLY_SIGNING_KEY_SSH"
+  printf >> "$SIGNING_KEYS_DIR/nightlies-cosign.key"  '%s\n' "$NIGHTLY_SIGNING_KEY_COSIGN"
+  EXTRACTED_SIGNING_KEYS=true
+}
+
+# SIDE-EFFECT: sets $EXTRACTED_SIGNING_KEYS to empty string
+remove_signing_keys() {
+  if [[ -n "${SIGNING_KEYS_DIR:-}" ]]; then
+    rm -rf "$SIGNING_KEYS_DIR"
+    unset SIGNING_KEYS_DIR
+  fi
+  EXTRACTED_SIGNING_KEYS=''
+}
+
+sign_artifact_cosign() {
+  local artifact="${1:?}"
+  extract_signing_keys
+  cosign sign-blob --key "$SIGNING_KEYS_DIR/nightlies-cosign.key" --output-signature "${artifact}.cosign.sig" "$artifact"
+}
+
+sign_artifact_ssh() {
+  local artifact="${1:?}"
+  extract_signing_keys
+  ssh-keygen -Y sign -n file -f "$SIGNING_KEYS_DIR/nightlies-ssh-signing" < "$artifact" > "${artifact}.ssh-ed25519.sig"
 }
 
 # TODO: we're using KV store for now, but this probably belongs in R2, once we get access to that.
@@ -252,6 +312,7 @@ publish_nightly_files_to_cloudflare() {
 
   # remove all indices
   rm -vf CURRENT COMMITS-*.txt
+  remove_signing_keys
 
   # Include a key which identifies which commits this nightly corresponds to
   for tool in "${!tool_repo_slugs[@]}"; do
@@ -289,10 +350,14 @@ main() {
     have_command "$cmd" || die "missing tool: ${cmd@Q}"
   done
   if (( opt_publish )); then
+    # shellcheck source=cloudflare.conf
     . "./$CLOUDFLARE_VARS_FILE"
     check_have_publish_credentials
     [[ -n "${CF_ACCOUNT:-}" ]] || die "missing cloudflare account in config"
     [[ -n "${CF_NIGHTLIES_KV_NAMESPACE:-}" ]] || die "missing cloudflare KV namespace in config"
+  fi
+  if (( opt_sign )); then
+    check_have_signing_keys
   fi
   case "$NIGHTLY_DATE" in
     */*) die "the NIGHTLY_DATE value contains a directory separator, do not do that: ${NIGHTLY_DATE@Q}" ;;
@@ -318,6 +383,11 @@ main() {
     echo "::endgroup::"
   done
   write_checksums
+  if (( opt_sign )); then
+    extract_signing_keys
+    sign_checksums
+    remove_signing_keys
+  fi
 
   # Now we can publish
   if (( opt_publish )); then

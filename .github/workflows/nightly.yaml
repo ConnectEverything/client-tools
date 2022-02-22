@@ -47,6 +47,9 @@ jobs:
           version: latest
           install-only: true
 
+      - name: Install cosign
+        uses: sigstore/cosign-installer@main
+
       - name: Run nightlies build-and-release tool
         id: build-cron
         if: ${{ github.event_name == 'schedule' }}
@@ -67,4 +70,5 @@ jobs:
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           NIGHTLY_DATE: ${{ github.event.inputs.nightly-id }}
-
+          NIGHTLY_SIGNING_KEY_COSIGN: ${{ secrets.NIGHTLY_SIGNING_KEY_COSIGN }}
+          NIGHTLY_SIGNING_KEY_SSH: ${{ secrets.NIGHTLY_SIGNING_KEY_SSH }}
