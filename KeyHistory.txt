@@ -1,0 +1,41 @@
+2022-02-22: Generated SSH and cosign keys
+
+Public keys retained in public-keys/ sub-dir.
+
+ssh-keygen -t ed25519 -f nightlies-ssh-signing -C 'NATS nightly builds SSH signing key' -N ''
+────────────────────8< nightlies-ssh-signing.pub >8─────────────────────
+ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEzdi120dj+GHcCp7WI97q+vHcrQwncdOPriMGCeZ94h NATS nightly builds SSH signing key
+────────────────────8< nightlies-ssh-signing.pub >8─────────────────────
+
+ssh-keygen -Y sign -n file -f nightlies-ssh-signing SIGNING.md
+mv SIGNING.md.sig SIGNING.md.ssh-ed25519.sig
+printf 'nightlies@get-nats.io namespaces="file" %s\n' "$(cat nightlies-ssh-signing.pub)" > ssh-signers
+
+ssh-keygen -Y verify -n file -f ssh-signers -I nightlies@get-nats.io -s SIGNING.md.ssh-ed25519.sig < SIGNING.md
+
+# for cosign, we do not generate directly into GitHub, to be able to preserve the signing key outside GitHub, for disaster recovery since the public key is public-facing.
+
+COSIGN_PASSWORD='' cosign generate-key-pair
+mv cosign.key nightlies-cosign.key
+mv cosign.pub nightlies-cosign.pub
+───────────────────────8< nightlies-cosign.pub >8───────────────────────
+-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGT2alAPKe/RewNlSMLIRRNjgnyxO
+51/SnmyVAmUwHtlYOLAAa3X2eNSjNdVaMVDwAwSWmq+toaGNXn4fqGMYww==
+-----END PUBLIC KEY-----
+───────────────────────8< nightlies-cosign.pub >8───────────────────────
+
+COSIGN_PASSWORD='' cosign sign-blob --key nightlies-cosign.key --output-signature SIGNING.md.cosign.sig SIGNING.md
+
+cosign verify-blob --key nightlies-cosign.pub --signature SIGNING.md.cosign.sig SIGNING.md
+Verified OK
+
+Populated 1Password vault "Release Signing" with entries:
+ * "client-tools nightlies signing key: cosign 2022-02"
+ * "client-tools nightlies signing key: ssh 2022-02"
+
+Populated <https://github.com/ConnectEverything/client-tools/settings/secrets/actions> with entries:
+ * NIGHTLY_SIGNING_KEY_COSIGN
+ * NIGHTLY_SIGNING_KEY_SSH
+
+rm -v nightlies-cosign.key nightlies-ssh-signing
