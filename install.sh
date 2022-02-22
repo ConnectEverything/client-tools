@@ -1,5 +1,5 @@
 #!/bin/sh
-# shellcheck disable=SC3043
+# shellcheck disable=SC3043,SC2237
 
 set -eu
 
@@ -40,6 +40,8 @@ set -eu
 # Shellcheck:
 #   SC3043: we use `local`.  It's a known portability limitation but it's sane.
 #   SC2064: we are deliberately expanding the trap string at set time
+#   SC2237: I've too many memories of [ -z "..." ] not being available,
+#           so am sticking with negated -n
 #
 # Based on knowledge that we won't put non-ASCII, quotes,
 # or internal whitespace into our channel files, we'll use:
@@ -75,6 +77,25 @@ readonly DEFAULT_NATS_CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/nats"
 
 readonly COMPLETION_ZSH_NATS_URL='https://get-nats.io/zsh.complete.nats'
 readonly ZSH_EXTRA_SETUP_URL='https://get-nats.io/zshrc'
+
+# These are the hard-coded public key identifiers for builds.
+# We don't pull them separately.
+# The SSH signers list is unified, the _ID selects an entry from it.
+readonly SIG_SSH_SIGNERS='nightlies@get-nats.io namespaces="file" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEzdi120dj+GHcCp7WI97q+vHcrQwncdOPriMGCeZ94h'
+# These vary per channel/tool; do we want to keep them in the script?
+# If not kept in the script, how do we reconcile "channels and tools are entirely in the channel config file" with this?
+# also, our eval below confuses shellcheck, these _are_ used
+# shellcheck disable=SC2034
+readonly SIG_SSH_nightly_ID='nightlies@get-nats.io'
+# shellcheck disable=SC2034
+readonly SIG_COSIGN_nightly_PUB='
+-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGT2alAPKe/RewNlSMLIRRNjgnyxO
+51/SnmyVAmUwHtlYOLAAa3X2eNSjNdVaMVDwAwSWmq+toaGNXn4fqGMYww==
+-----END PUBLIC KEY-----
+'
+
+readonly SIG_HAVE_PUBKEYS_FOR_CHANNELS="nightly"
 
 # Shell variables referenced below as optional:
 #  SECRET -- used for loading an account generated elsewhere
@@ -127,7 +148,8 @@ usage() {
   local ev="${1:-1}"
   [ "$ev" = 0 ] || exec >&2
   cat <<EOUSAGE
-Usage: $progname [-f] [-c <channel>] [-d <dir>] [-C <dir>] [-a <arch>] [-o <ostype>]
+Usage: $progname [-Uf] [-c <channel>] [-d <dir>] [-C <dir>] [-a <arch>] [-o <ostype>]
+ -U           unverified, do not check checksums
  -f           force, don't prompt before installing over files
               (if the script is piped in on stdin, force will be forced on)
  -c channel   channel to install ("stable", "nightly")
@@ -148,11 +170,12 @@ opt_channel_file=''
 opt_nightly_date=''
 opt_arch=''
 opt_ostype=''
+opt_unverified=false
 opt_force=false
 nsc_env_secret="${SECRET:-}"
 nsc_env_operator_name="${NSC_OPERATOR_NAME:-synadia}"
 parse_options() {
-  while getopts ':a:c:d:fho:C:F:N:' arg; do
+  while getopts ':a:c:d:fho:C:F:N:U' arg; do
     case "$arg" in
       (h) usage 0 ;;
 
@@ -170,6 +193,7 @@ parse_options() {
       (C) opt_config_dir="$OPTARG" ;;
       (F) opt_channel_file="$OPTARG" ;;
       (N) opt_nightly_date="$OPTARG" ;;
+      (U) opt_unverified=true ;;
 
       (:) die "missing required option for -$OPTARG; see -h for help" ;;
       (\?) die "unknown option -$OPTARG; see -h for help" ;;
@@ -206,6 +230,12 @@ check_have_external_commands() {
   for cmd in curl unzip
   do
     have_command "$cmd" || die "missing command: $cmd"
+  done
+
+  # These are highly desirable
+  for cmd in ssh-keygen cosign
+  do
+    have_command "$cmd" || warn "missing command: $cmd"
   done
 
   # Our invocation of mktemp has to handle multiple variants; if that's not
@@ -463,6 +493,7 @@ fetch_and_parse_channels() {
   local chanfile chan_origin
   local channel tool suffix version zipfile checksumfile urldir sysos sysarch
   local varfile known count found line nightly_version
+  local is_signed tmp_chan sig_ssh_id sig_cosign_pub sig_cosign_filename
 
   if [ -n "$opt_channel_file" ]; then
     chanfile="$opt_channel_file"
@@ -532,6 +563,14 @@ fetch_and_parse_channels() {
     fi
   fi
 
+  is_signed=false
+  for tmp_chan in $SIG_HAVE_PUBKEYS_FOR_CHANNELS; do
+    if [ "$tmp_chan" = "$channel" ]; then
+      is_signed=true
+      break
+    fi
+  done
+
   sysos="$(normalized_ostype)"
   sysarch="$(normalized_arch)"
 
@@ -570,6 +609,28 @@ urldir='${urldir}'
 sysos='${sysos}'
 sysarch='${sysarch}'
 EOVARS
+    if $is_signed; then
+      # This data is internal to the script, so inherently trusted and eval-safe.
+      eval "sig_ssh_id=\"\$SIG_SSH_${channel}_ID\""
+      eval "sig_cosign_pub=\"\$SIG_COSIGN_${channel}_PUB\""
+      sig_cosign_filename="$WORK_DIR/cosign_${channel}_${tool}.pub"
+      # FIXME: this only works for nightlies, what should this look like for tools?
+      # What if a tool is not signed with both these mechanisms?
+      # SIG_${SIGTYPE}_${channel}_${tool}_${id_or_pub} ?
+      cat >> "$varfile" << EOSIG
+is_signed=true
+sig_ssh_id='${sig_ssh_id}'
+sig_cosign_filename='${sig_cosign_filename}'
+EOSIG
+      printf > "$sig_cosign_filename" '%s' "$sig_cosign_pub"
+    else
+      cat >> "$varfile" << EOSIG
+is_signed=false
+sig_ssh_id=''
+sig_cosign_filename=''
+EOSIG
+    fi
+
   done
 }
 
@@ -624,8 +685,43 @@ expand_config_value() {
 fetch_and_validate_files() {
   local tool varfile unzip_dir
   local vars here expected_cs local_cs
+  local is_signed sig_cosign_pub sig_ssh_id sig_cosign_filename
+  local do_sig_checks use_sig_cosign use_sig_sshkeygen sig_label ssh_maj ssh_signers_file
   here="$(pwd)"
   cd "$WORK_DIR"
+
+  do_sig_checks=false
+  use_sig_cosign=false
+  use_sig_sshkeygen=false
+  sig_label=''
+  if $opt_unverified; then
+    note "signature checking disabled"
+  else
+    if have_command cosign; then
+      use_sig_cosign=true
+      do_sig_checks=true
+      sig_label="${sig_label} [using cosign]"
+    fi
+    if have_command ssh-keygen; then
+      # OpenSSH 8.0 introduced sign/verify to ssh-keygen
+      # We assume here that if we have ssh-keygen then ssh is of the same release
+      ssh_maj="$(ssh -V 2>&1 | cut -d . -f 1)"
+      if [ "${ssh_maj}" != "${ssh_maj#OpenSSH_}" ] && [ "${ssh_maj#OpenSSH_}" -ge 8 ]; then
+        use_sig_sshkeygen=true
+        do_sig_checks=true
+        ssh_signers_file="$WORK_DIR/ssh-signers"
+        printf '%s\n' "$SIG_SSH_SIGNERS" > "$ssh_signers_file"
+        sig_label="${sig_label} [using ssh-keygen]"
+      else
+        note "skipping ssh-keygen because we don't think it's OpenSSH 8.0 or newer"
+      fi
+    fi
+    if $do_sig_checks; then
+      note "will check for signatures${sig_label}"
+    else
+      note "want to check for signatures, but missing cosign and working ssh-keygen"
+    fi
+  fi
 
   INSTALL_FILES=''
   for tool in $ALL_TOOLS; do
@@ -643,6 +739,20 @@ fetch_and_validate_files() {
       curl_cmd_progress --fail --location \
         --output "./$zipfile" "${urldir%/}/$zipfile" \
         --output "./$checksumfile" "${urldir%/}/$checksumfile"
+      if $is_signed && $do_sig_checks; then
+        # Without sane shell arrays, we settle for a second curl invocation
+        curl_cmd --progress-bar --fail --location \
+          --output "./${checksumfile}.cosign.sig" "${urldir%/}/${checksumfile}.cosign.sig" \
+          --output "./${checksumfile}.ssh-ed25519.sig" "${urldir%/}/${checksumfile}.ssh-ed25519.sig"
+        if $use_sig_sshkeygen; then
+          note "checking ssh-keygen signature of: $checksumfile"
+          ssh-keygen -Y verify -n file -f "$ssh_signers_file" -I "$sig_ssh_id" -s "./${checksumfile}.ssh-ed25519.sig" < "./${checksumfile}" || die "ssh signature check failed"
+        fi
+        if $use_sig_cosign; then
+          note "checking cosign signature of: $checksumfile"
+          cosign verify-blob --key "$sig_cosign_filename" --signature "./${checksumfile}.cosign.sig" "./${checksumfile}"
+        fi
+      fi
       # NB: we are currently hard-coding an assumption of SHA256.
       expected_cs="$(checksum_for_file_entry "$checksumfile" "$zipfile")"
       local_cs="$(checksum_one_binary "$zipfile")"
