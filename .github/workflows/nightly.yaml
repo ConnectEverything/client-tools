@@ -36,9 +36,6 @@ jobs:
           go-version: 1.17
           check-latest: true
 
-# FIXME: cosign for artifacts
-# Use a different signing key to the one used for synadia-server
-
       - name: Install GoReleaser
         id: goreleaser-install
         uses: goreleaser/goreleaser-action@v2
@@ -48,7 +45,27 @@ jobs:
           install-only: true
 
       - name: Install cosign
+        id: cosign-install
         uses: sigstore/cosign-installer@main
+
+      - name: Setup caching of Go modules and packages
+        id: caching
+        uses: actions/cache@v2
+        with:
+          # Copy the path from that documented for an action we're not using; <https://github.com/mvdan/github-actions-golang>
+          # In order:
+          # * Module download cache
+          # * Build cache (Linux)
+          # * Build cache (Mac)
+          # * Build cache (Windows)
+          path: |
+            ~/go/pkg/mod
+            ~/.cache/go-build
+            ~/Library/Caches/go-build
+            %LocalAppData%\go-build
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
 
       - name: Run nightlies build-and-release tool
         id: build-cron
