@@ -76,6 +76,8 @@ jobs:
           CLOUDFLARE_AUTH_TOKEN: ${{ secrets.CLOUDFLARE_AUTH_TOKEN }}
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          NIGHTLY_SIGNING_KEY_COSIGN: ${{ secrets.NIGHTLY_SIGNING_KEY_COSIGN }}
+          NIGHTLY_SIGNING_KEY_SSH: ${{ secrets.NIGHTLY_SIGNING_KEY_SSH }}
 
       - name: Run manual build-and-release tool
         id: build-manual
@@ -86,6 +88,9 @@ jobs:
           CLOUDFLARE_AUTH_TOKEN: ${{ secrets.CLOUDFLARE_AUTH_TOKEN }}
           GORELEASER_KEY: ${{ secrets.GORELEASER_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          NIGHTLY_DATE: ${{ github.event.inputs.nightly-id }}
           NIGHTLY_SIGNING_KEY_COSIGN: ${{ secrets.NIGHTLY_SIGNING_KEY_COSIGN }}
           NIGHTLY_SIGNING_KEY_SSH: ${{ secrets.NIGHTLY_SIGNING_KEY_SSH }}
+          #
+          NIGHTLY_DATE: ${{ github.event.inputs.nightly-id }}
+          # NB: IF ADDING HERE, PROBABLY ALSO ADD TO 'schedule' INVOCATION ABOVE
+
