@@ -6,16 +6,51 @@
 #   zstyle ':completion:*' fake-parameters \
 #     AWS_PROFILE DOCKER_CONTEXT NATS_CONTEXT
 #
+# You can set the standard zstyle 'extra-verbose' to true such that it applies
+# to us, to see context descriptions; these are comparatively expensive to
+# calculate.  The `jq` command is invoked once per context.
+# You can set the zstyle generally with custom keybindings, or enable it on a
+# per-command basis; eg:
+#   zstyle ':completion::complete:nats:*' extra-verbose true
+#   zstyle ':completion::complete:-value-,NATS_CONTEXT,:' extra-verbose true
+#
 
 local curcontext="$curcontext" state line expl cmdword
-local -a nats_contexts nats_commands nats_sub nats_flags
+local nctx
+local -a nats_contexts nats_commands nats_sub nats_flags described_contexts
 local -A nats_decorate_flags_desc nats_decorate_flags_next nats_decorate_flags_mutex
+local -i nats_everbose=0
 
-nats_contexts=( "${XDG_CONFIG_HOME:-$HOME/.config}/nats/context"/*(:t:r) )
+# extra-verbose is documented as for features which will slow completion speed.
+if zstyle -t ":completion:${curcontext}:" extra-verbose; then
+  if (( $+commands[jq] )); then
+    nats_everbose=1
+  else
+    : # should we report this back as an error somehow?
+  fi
+fi
+
+local -r nats_ctxdir="${XDG_CONFIG_HOME:-$HOME/.config}/nats/context"
+
+nats_contexts=( "$nats_ctxdir"/*(:t:r) )
+
+# TODO: come up with a cache expiration strategy and integrate this with use-cache
+# or at least a global variable.
+_nats_context_names() {
+  if (( nats_everbose )); then
+    described_contexts=()
+    for nctx in "${nats_contexts[@]}"; do
+      described_contexts+=("${nctx//:/\\:}:$(jq -r .description < "$nats_ctxdir/$nctx.json")")
+    done
+    _describe nats-contexts described_contexts
+  else
+    _wanted nats-contexts expl 'nats contexts' compadd "$@" -- "${nats_contexts[@]}"
+  fi
+}
 
 case "$service" in
   *,NATS_CONTEXT,*)
-    _wanted nats-contexts expl 'nats contexts' compadd "$@" -- "${nats_contexts[@]}"
+    _nats_context_names
     return 0
     ;;
 esac
@@ -46,7 +81,7 @@ nats_decorate_flags_next=(
 	[user]=' ' [password]=' '
 	[server]=' '
 	[timeout]=' '
-	[context]='($nats_contexts)'
+	[context]='_nats_context_names'
 )
 
 # We populate a complete set first, so that even if we don't have more details below,
