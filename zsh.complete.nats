@@ -6,41 +6,65 @@
 #   zstyle ':completion:*' fake-parameters \
 #     AWS_PROFILE DOCKER_CONTEXT NATS_CONTEXT
 #
-# You can set the standard zstyle 'extra-verbose' to true such that it applies
-# to us, to see context descriptions; these are comparatively expensive to
-# calculate.  The `jq` command is invoked once per context.
+# You can set the standard zstyle 'verbose' to true such that it applies
+# to us, to see context descriptions.
 # You can set the zstyle generally with custom keybindings, or enable it on a
 # per-command basis; eg:
-#   zstyle ':completion::complete:nats:*' extra-verbose true
-#   zstyle ':completion::complete:-value-,NATS_CONTEXT,:' extra-verbose true
+#   zstyle ':completion::complete:nats:*' verbose true
+#   zstyle ':completion::complete:-value-,NATS_CONTEXT,:' verbose true
+#
+# The approach used to get the descriptions is slightly fragile, based upon raw
+# text-line parsing of the JSON context files.  If we change that storage at all,
+# and have to switch back to invoking jq once per file, then we will unfortunately
+# have to move the zstyle guard across to 'extra-verbose' instead.  It's only the
+# mapfile technique which lets us keep this as only being 'verbose'.
 #
 
 local curcontext="$curcontext" state line expl cmdword
 local nctx
 local -a nats_contexts nats_commands nats_sub nats_flags described_contexts
 local -A nats_decorate_flags_desc nats_decorate_flags_next nats_decorate_flags_mutex
-local -i nats_everbose=0
+local -i nats_verbose=0
 
 # extra-verbose is documented as for features which will slow completion speed.
-if zstyle -t ":completion:${curcontext}:" extra-verbose; then
-  if (( $+commands[jq] )); then
-    nats_everbose=1
-  else
-    : # should we report this back as an error somehow?
-  fi
+# verbose is just for being more wordy.
+# If we have to revert back to the jq invocation approach, then we should use
+# extra-verbose as our conditional here.
+if zstyle -t ":completion:${curcontext}:" verbose; then
+  nats_verbose=1
 fi
+
+local -ra want_context=(
+  context:edit
+  context:info
+  context:rm
+  context:select
+  context:show
+  context:validate
+)
 
 local -r nats_ctxdir="${XDG_CONFIG_HOME:-$HOME/.config}/nats/context"
 
-nats_contexts=( "$nats_ctxdir"/*(:t:r) )
+nats_contexts=( "$nats_ctxdir"/*(N:t:r) )
 
+# *IF* we revert back to using jq, then:
 # TODO: come up with a cache expiration strategy and integrate this with use-cache
 # or at least a global variable.
+#
+# The performance difference scales rapidly with number of contexts.
+#
+(( ${+functions[_nats_context_names]} )) ||
 _nats_context_names() {
-  if (( nats_everbose )); then
+  if (( nats_verbose )); then
     described_contexts=()
     for nctx in "${nats_contexts[@]}"; do
-      described_contexts+=("${nctx//:/\\:}:$(jq -r .description < "$nats_ctxdir/$nctx.json")")
+      # This is the more reliable but much slower method, using repeated invocations of jq:
+      #described_contexts+=("${nctx//:/\\:}:$(_call_program jq "jq -r .description < \"${(q)nats_ctxdir}/${(q)nctx}.json\"")")
+      # This, thanks to Bart Schaefer, is a zsh-native approach which will work
+      # as long as the JSON files are one field per line; if we start storing
+      # the JSON data as single-line blobs then we will need to switch back to
+      # the heavy-weight jq approach:
+      described_contexts+=("${nctx//:/\\:}:${${${${(@M)${(f)mapfile[$nats_ctxdir/$nctx.json]}:#[[:space:]]##\"description\":*}#*: \"}%,}%\"}")
     done
     _describe nats-contexts described_contexts
   else
@@ -55,7 +79,7 @@ case "$service" in
     ;;
 esac
 
-nats_decorate_flags_desc=(
+nats_decorate_flags_desc=( # this assumes zsh is-at-least 5.5
 	[context]='NATS user context'
 	[tlscert]='TLS client auth public certificate'
 	[tlskey]='TLS client auth private key'
@@ -86,12 +110,14 @@ nats_decorate_flags_next=(
 
 # We populate a complete set first, so that even if we don't have more details below,
 # we can still tab-complete it; it will just be missing some data
-nats_commands=( $(${words[1]} --completion-bash ${words[1]}) )
+nats_commands=( $(_call_program nats-completion-bash "${(q)words[1]} --completion-bash ${(qq)words[1]}") )
 
 # Most flags can appear anywhere; this is not a git-style "top command flags"
 # vs "subcommand flags", but instead "one pool of flags which gains extra
 # entries for some subcommands".
-nats_flags=( $(${words[1]} --completion-bash ${words[1]} --) )
+nats_flags=( $(_call_program nats-completion-bash "${(q)words[1]} --completion-bash ${(qq)words[1]} --") )
+
+(( ${+functions[_nats_decorate_flags]} )) ||
 _nats_decorate_flags() {
   #zle -M "decorating ..."; zle -R
   local flag directive
@@ -135,12 +161,18 @@ case "$state" in
   ;;
 (after-command)
   curcontext=${curcontext%:*:*}:nats-$words[1]:
-  nats_sub=( $("$cmdword" --completion-bash "${words[@]}") )
+  nats_sub=( $(_call_program nats-completion-bash "${(q)cmdword} --completion-bash ${${(qq)words[@]}}") )
   if [[ ${#nats_sub} -eq 0 ]]; then
     # terminal
-    nats_flags=( $("$cmdword" --completion-bash "${words[@]}" --) )
+    nats_flags=( $(_call_program nats-completion-bash "${(q)cmdwords} --completion-bash ${${(qq)words[@]}} --") )
     _nats_decorate_flags
-    _arguments -C "${nats_flags[@]}" '(-): :->commands' '(-)*:: :->after-command' && return
+    # We use -2 to drop the last word, which might be mid-word if expanding again after a few letters.
+    nctx="${(j,:,)words[1,-2]}"
+    if (( ${want_context[(Ie)$nctx]} )); then
+      _arguments -C "${nats_flags[@]}" '(-): :->commands' '(-)*:: :_nats_context_names' && return
+    else
+      _arguments -C "${nats_flags[@]}" '(-): :->commands' '(-)*:: :->after-command' && return
+    fi
   else
     _describe -t nats-sub-commands 'nats sub-commands' nats_sub
   fi
