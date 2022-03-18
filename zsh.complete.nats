@@ -1,17 +1,18 @@
 #compdef nats -value-,NATS_CONTEXT,-default-
 
+# This file should be installed as '_nats' in a directory in your $fpath list.
+
 # Recommendation: place NATS_CONTEXT into your fake-parameters zstyle
 #
 # Eg:
 #   zstyle ':completion:*' fake-parameters \
 #     AWS_PROFILE DOCKER_CONTEXT NATS_CONTEXT
 #
-# You can set the standard zstyle 'verbose' to true such that it applies
-# to us, to see context descriptions.
-# You can set the zstyle generally with custom keybindings, or enable it on a
-# per-command basis; eg:
-#   zstyle ':completion::complete:nats:*' verbose true
-#   zstyle ':completion::complete:-value-,NATS_CONTEXT,:' verbose true
+# The standard zstyle 'verbose' bool is honored for NATS context names; this
+# true-by-default style causes the completion to decorate the names with the
+# .description fields from the contexts.  Override with:
+#   zstyle ':completion::complete:nats:*' verbose false
+#   zstyle ':completion::complete:-value-,NATS_CONTEXT,:' verbose false
 #
 # The approach used to get the descriptions is slightly fragile, based upon raw
 # text-line parsing of the JSON context files.  If we change that storage at all,
@@ -29,8 +30,13 @@ local -i nats_verbose=0
 # extra-verbose is documented as for features which will slow completion speed.
 # verbose is just for being more wordy.
 # If we have to revert back to the jq invocation approach, then we should use
-# extra-verbose as our conditional here.
-if zstyle -t ":completion:${curcontext}:" verbose; then
+# `-t extra-verbose` as our conditional here.
+if zstyle -T ":completion:${curcontext}:" verbose; then
+  # nb: 'verbose' is on-by-default for zsh, but this is by convention and
+  # documentation, rather than by logic.  So when querying the style, we use
+  # '-T' so that absence of the option is taken as true, not false.
+  # If switching to extra-verbose, off-by-default, then the above zstyle test
+  # needs to switch to -t instead of -T.
   nats_verbose=1
 fi
 
