@@ -382,6 +382,23 @@ curl_cmd() {
   curl --user-agent "$HTTP_USER_AGENT" "$@"
 }
 
+curl_cmd_progress() {
+  if ! [ -t 0 ]; then
+    # we risk some strange output left-over with curl and progress bars when it can't determine
+    # the full width of the terminal, so we smooth things over
+    if [ -t 2 ]; then
+      curl_cmd --progress-bar "$@" <&2
+    elif [ -t 1 ]; then
+      curl_cmd --progress-bar "$@" <&1
+    else
+      # give up
+      curl_cmd --progress-bar "$@"
+    fi
+  else
+    curl_cmd --progress-bar "$@"
+  fi
+}
+
 dir_is_in_PATH() {
   local needle="$1"
   local oIFS="$IFS"
@@ -613,7 +630,7 @@ fetch_and_validate_files() {
     . "$varfile"
 
     if [ -n "$checksumfile" ]; then
-      curl_cmd --progress-bar --fail --location \
+      curl_cmd_progress --fail --location \
         --output "./$zipfile" "${urldir%/}/$zipfile" \
         --output "./$checksumfile" "${urldir%/}/$checksumfile"
       # NB: we are currently hard-coding an assumption of SHA256.
@@ -629,7 +646,7 @@ fetch_and_validate_files() {
         die "aborting rather than install corrupted file; please report this"
       fi
     else
-      curl_cmd --progress-bar --fail --location \
+      curl_cmd_progress --fail --location \
         --output "./$zipfile" "${urldir%/}/$zipfile"
       note "!!! no checksum file available !!!"
     fi
