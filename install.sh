@@ -76,6 +76,10 @@ readonly DEFAULT_NATS_CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/nats"
 readonly COMPLETION_ZSH_NATS_URL='https://get-nats.io/zsh.complete.nats'
 readonly ZSH_EXTRA_SETUP_URL='https://get-nats.io/zshrc'
 
+# Shell variables referenced below as optional:
+#  SECRET -- used for loading an account generated elsewhere
+#  NSC_OPERATOR_NAME -- used to override the operator when using $SECRET loading
+
 ### END OF CONFIGURATION ###
 
 progname="$(basename "$0" .sh)"
@@ -145,8 +149,8 @@ opt_nightly_date=''
 opt_arch=''
 opt_ostype=''
 opt_force=false
-nsc_env_secret="${SECRET:-''}"
-nsc_env_operator_name="${NSC_OPERATOR_NAME:-'synadia'}"
+nsc_env_secret="${SECRET:-}"
+nsc_env_operator_name="${NSC_OPERATOR_NAME:-synadia}"
 parse_options() {
   while getopts ':a:c:d:fho:C:F:N:' arg; do
     case "$arg" in
@@ -804,7 +808,7 @@ store_channel() {
 
 load_context() {
   if [ "$nsc_env_secret" = "" ]; then
-    return 0  
+    return 0
   fi
   note "setting nats context"
   "$opt_install_dir/nsc" load --profile "nsc://$nsc_env_operator_name?secret=$nsc_env_secret"
