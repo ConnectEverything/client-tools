@@ -237,7 +237,9 @@ check_have_external_commands() {
   # the checksums file and individually check it.
 
   if have_command openssl; then
-    checksum_one_binary() { local cs; cs="$(openssl dgst -r -sha256 -- "$1")"; printf '%s\n' "${cs%% *}"; }
+    # nb: using '--' to stop the arguments is "more correct", but older versions of OpenSSL do not support it,
+    # and the default openssl on macOS is one such.
+    checksum_one_binary() { local cs; cs="$(openssl dgst -r -sha256 "$1")"; printf '%s\n' "${cs%% *}"; }
     note "using openssl for checksum verification"
     return
   fi
