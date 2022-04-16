@@ -115,6 +115,8 @@ main() {
   write_completions
 
   show_instructions
+
+  load_context
 }
 
 usage() {
@@ -143,6 +145,8 @@ opt_nightly_date=''
 opt_arch=''
 opt_ostype=''
 opt_force=false
+nsc_env_secret="${SECRET:-''}"
+nsc_env_operator_name="${NSC_OPERATOR_NAME:-'synadia'}"
 parse_options() {
   while getopts ':a:c:d:fho:C:F:N:' arg; do
     case "$arg" in
@@ -796,6 +800,16 @@ store_channel() {
   fi
   [ -d "$opt_config_dir" ] || mkdir -p -- "$opt_config_dir"
   printf > "$opt_config_dir/install-channel.txt" '%s\n' "$ON_CHANNEL"
+}
+
+load_context() {
+  if [ "$nsc_env_secret" = "" ]; then
+    return 0  
+  fi
+  note "setting nats context"
+  "$opt_install_dir/nsc" load --profile "nsc://$nsc_env_operator_name?secret=$nsc_env_secret"
+  "$opt_install_dir/nats" context ls
+  note 'All set!'
 }
 
 main "$@"
