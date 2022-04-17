@@ -127,9 +127,11 @@ usage() {
   local ev="${1:-1}"
   [ "$ev" = 0 ] || exec >&2
   cat <<EOUSAGE
-Usage: $progname [-f] [-c <channel>] [-d <dir>] [-C <dir>] [-a <arch>] [-o <ostype>]
+Usage: $progname [-fqv] [-c <channel>] [-d <dir>] [-C <dir>] [-a <arch>] [-o <ostype>]
  -f           force, don't prompt before installing over files
               (if the script is piped in on stdin, force will be forced on)
+ -v           be more verbose
+ -q           be more quiet
  -c channel   channel to install ("stable", "nightly")
  -d dir       directory to download into [default: $DEFAULT_BINARY_INSTALL_DIR]
  -C configdir directory to keep configs in [default: $DEFAULT_NATS_CONFIG_DIR]
@@ -141,6 +143,7 @@ EOUSAGE
   exit "$ev"
 }
 
+VERBOSE=1
 opt_install_dir=''
 opt_config_dir=''
 opt_channel=''
@@ -152,7 +155,7 @@ opt_force=false
 nsc_env_secret="${SECRET:-}"
 nsc_env_operator_name="${NSC_OPERATOR_NAME:-synadia}"
 parse_options() {
-  while getopts ':a:c:d:fho:C:F:N:' arg; do
+  while getopts ':a:c:d:fho:qvC:F:N:' arg; do
     case "$arg" in
       (h) usage 0 ;;
 
@@ -167,6 +170,8 @@ parse_options() {
       (d) opt_install_dir="$OPTARG" ;;
       (f) opt_force=true ;;
       (o) opt_ostype="$OPTARG" ;;
+      (q) VERBOSE=$(( VERBOSE - 1 )) ;;
+      (v) VERBOSE=$(( VERBOSE + 1 )) ;;
       (C) opt_config_dir="$OPTARG" ;;
       (F) opt_channel_file="$OPTARG" ;;
       (N) opt_nightly_date="$OPTARG" ;;
@@ -191,6 +196,12 @@ parse_options() {
   if ! [ -t 0 ]; then
     # we won't be able to prompt the user; curl|sh pattern
     opt_force=true
+  fi
+  if [ -n "${SECRET:-}" ]; then
+    # in nsc load mode, there's enough later important things that
+    # we want to be quieter early on; this is an issue at the intersection of
+    # style/taste and usability.
+    VERBOSE=$(( VERBOSE - 1 ))
   fi
 }
 
@@ -393,6 +404,10 @@ curl_cmd() {
 }
 
 curl_cmd_progress() {
+  if [ "$VERBOSE" -lt 1 ]; then
+    curl_cmd --silent --show-error "$@" || return $?
+    return 0
+  fi
   if ! [ -t 0 ]; then
     # we risk some strange output left-over with curl and progress bars when it can't determine
     # the full width of the terminal, so we smooth things over
@@ -661,7 +676,11 @@ fetch_and_validate_files() {
       note "!!! no checksum file available !!!"
     fi
 
-    unzip -j -d "$unzip_dir" "./$zipfile"
+    if [ "$VERBOSE" -ge 1 ]; then
+      unzip -j -d "$unzip_dir" "./$zipfile"
+    else
+      unzip -q -j -d "$unzip_dir" "./$zipfile"
+    fi
 
     INSTALL_FILES="${INSTALL_FILES}${INSTALL_FILES:+ }$WORK_DIR/$unzip_dir/$executable"
 
