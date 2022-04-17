@@ -81,7 +81,12 @@ readonly ZSH_EXTRA_SETUP_URL='https://get-nats.io/zshrc'
 # These are the hard-coded public key identifiers for builds.
 # We don't pull them separately.
 # The SSH signers list is unified, the _ID selects an entry from it.
-readonly SIG_SSH_SIGNERS='nightlies@get-nats.io namespaces="file" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEzdi120dj+GHcCp7WI97q+vHcrQwncdOPriMGCeZ94h'
+# For NSC, the releases key should match that found in the
+# nats-io/nsc repository file: release/nsc-release-signing-ssh.pub
+readonly SIG_SSH_SIGNERS='
+nightlies@get-nats.io namespaces="file" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIEzdi120dj+GHcCp7WI97q+vHcrQwncdOPriMGCeZ94h
+nsc-releases@get-nats.io namespaces="file" ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIKLLmYCvqzSVa+ZwHDToc6DLjGBMII7B9jSSRbZ8ylbN
+'
 # These vary per channel/tool; do we want to keep them in the script?
 # If not kept in the script, how do we reconcile "channels and tools are entirely in the channel config file" with this?
 # also, our eval below confuses shellcheck, these _are_ used
@@ -94,6 +99,21 @@ MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAEGT2alAPKe/RewNlSMLIRRNjgnyxO
 51/SnmyVAmUwHtlYOLAAa3X2eNSjNdVaMVDwAwSWmq+toaGNXn4fqGMYww==
 -----END PUBLIC KEY-----
 '
+
+## FIXME: these are nsc-specific
+# shellcheck disable=SC2034
+readonly SIG_SSH_stable_ID='nsc-releases@get-nats.io'
+# The cosign file should match that from the nats-io/nsc repository file:
+# release/nsc-release-cosign.pub
+# shellcheck disable=SC2034
+readonly SIG_COSIGN_stable_PUB='
+-----BEGIN PUBLIC KEY-----
+MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE+Zi4Lxy2j3MYdUSWkKi/aQfA73s7
+aNxCtk9yNPc3I08TsWISvhqbxquDHGOeDdf0FQh6mHMWclke2mMIYGDuLA==
+-----END PUBLIC KEY-----
+'
+readonly SIG_SSH_nightly_EXT='ssh-ed25519'
+readonly SIG_SSH_stable_EXT='ssh'
 
 readonly SIG_HAVE_PUBKEYS_FOR_CHANNELS="nightly"
 
@@ -148,10 +168,11 @@ usage() {
   local ev="${1:-1}"
   [ "$ev" = 0 ] || exec >&2
   cat <<EOUSAGE
-Usage: $progname [-Uf] [-c <channel>] [-d <dir>] [-C <dir>] [-a <arch>] [-o <ostype>]
+Usage: $progname [-Ufv] [-c <channel>] [-d <dir>] [-C <dir>] [-a <arch>] [-o <ostype>]
  -U           unverified, do not check checksums
  -f           force, don't prompt before installing over files
               (if the script is piped in on stdin, force will be forced on)
+ -v           be more verbose
  -c channel   channel to install ("stable", "nightly")
  -d dir       directory to download into [default: $DEFAULT_BINARY_INSTALL_DIR]
  -C configdir directory to keep configs in [default: $DEFAULT_NATS_CONFIG_DIR]
@@ -174,8 +195,9 @@ opt_unverified=false
 opt_force=false
 nsc_env_secret="${SECRET:-}"
 nsc_env_operator_name="${NSC_OPERATOR_NAME:-synadia}"
+VERBOSE=0
 parse_options() {
-  while getopts ':a:c:d:fho:C:F:N:U' arg; do
+  while getopts ':a:c:d:fho:vC:F:N:U' arg; do
     case "$arg" in
       (h) usage 0 ;;
 
@@ -190,6 +212,7 @@ parse_options() {
       (d) opt_install_dir="$OPTARG" ;;
       (f) opt_force=true ;;
       (o) opt_ostype="$OPTARG" ;;
+      (v) VERBOSE=$(( VERBOSE + 1 )) ;;
       (C) opt_config_dir="$OPTARG" ;;
       (F) opt_channel_file="$OPTARG" ;;
       (N) opt_nightly_date="$OPTARG" ;;
@@ -419,6 +442,9 @@ normalized_arch() {
 }
 
 curl_cmd() {
+  if [ "$VERBOSE" -gt 0 ]; then
+    printf >&2 '+ curl --user-agent %s %s\n' "$HTTP_USER_AGENT" "$*"
+  fi
   curl --user-agent "$HTTP_USER_AGENT" "$@"
 }
 
@@ -570,6 +596,7 @@ fetch_and_parse_channels() {
       break
     fi
   done
+  is_signed=true
 
   sysos="$(normalized_ostype)"
   sysarch="$(normalized_arch)"
@@ -608,10 +635,12 @@ urldir='${urldir}'
 
 sysos='${sysos}'
 sysarch='${sysarch}'
+channel='${channel}'
 EOVARS
     if $is_signed; then
       # This data is internal to the script, so inherently trusted and eval-safe.
       eval "sig_ssh_id=\"\$SIG_SSH_${channel}_ID\""
+      eval "sig_ssh_ext=\"\$SIG_SSH_${channel}_EXT\""
       eval "sig_cosign_pub=\"\$SIG_COSIGN_${channel}_PUB\""
       sig_cosign_filename="$WORK_DIR/cosign_${channel}_${tool}.pub"
       # FIXME: this only works for nightlies, what should this look like for tools?
@@ -620,6 +649,7 @@ EOVARS
       cat >> "$varfile" << EOSIG
 is_signed=true
 sig_ssh_id='${sig_ssh_id}'
+sig_ssh_ext='${sig_ssh_ext}'
 sig_cosign_filename='${sig_cosign_filename}'
 EOSIG
       printf > "$sig_cosign_filename" '%s' "$sig_cosign_pub"
@@ -627,6 +657,7 @@ EOSIG
       cat >> "$varfile" << EOSIG
 is_signed=false
 sig_ssh_id=''
+sig_ssh_ext=''
 sig_cosign_filename=''
 EOSIG
     fi
@@ -735,18 +766,24 @@ fetch_and_validate_files() {
     # shellcheck source=/dev/null
     . "$varfile"
 
+    if $is_signed && [ "$tool" = "nats" ] && [ "$channel" != nightly ]; then
+      # FIXME: This whole code branch is a nightmare, need to rethink
+      note ":: FIXME: DISABLING nats SIGNATURE CHECKS FOR: $channel"
+      is_signed=false
+    fi
+
     if [ -n "$checksumfile" ]; then
       curl_cmd_progress --fail --location \
         --output "./$zipfile" "${urldir%/}/$zipfile" \
         --output "./$checksumfile" "${urldir%/}/$checksumfile"
       if $is_signed && $do_sig_checks; then
         # Without sane shell arrays, we settle for a second curl invocation
-        curl_cmd --progress-bar --fail --location \
+        curl_cmd_progress --fail --location \
           --output "./${checksumfile}.cosign.sig" "${urldir%/}/${checksumfile}.cosign.sig" \
-          --output "./${checksumfile}.ssh-ed25519.sig" "${urldir%/}/${checksumfile}.ssh-ed25519.sig"
+          --output "./${checksumfile}.${sig_ssh_ext}.sig" "${urldir%/}/${checksumfile}.${sig_ssh_ext}.sig"
         if $use_sig_sshkeygen; then
           note "checking ssh-keygen signature of: $checksumfile"
-          ssh-keygen -Y verify -n file -f "$ssh_signers_file" -I "$sig_ssh_id" -s "./${checksumfile}.ssh-ed25519.sig" < "./${checksumfile}" || die "ssh signature check failed"
+          ssh-keygen -Y verify -n file -f "$ssh_signers_file" -I "$sig_ssh_id" -s "./${checksumfile}.${sig_ssh_ext}.sig" < "./${checksumfile}" || die "ssh signature check failed"
         fi
         if $use_sig_cosign; then
           note "checking cosign signature of: $checksumfile"
