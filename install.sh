@@ -766,7 +766,7 @@ show_instructions() {
     note "installation dir '${opt_install_dir}' already in PATH"
     echo
     show_instructions_completion
-    note "all done"
+    note "tools installed: $ALL_TOOLS"
     return 0
   fi
 
