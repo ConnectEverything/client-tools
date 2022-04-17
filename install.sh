@@ -1,5 +1,5 @@
 #!/bin/sh
-# shellcheck disable=SC3043
+# shellcheck disable=SC3043,SC2237
 
 set -eu
 
@@ -38,8 +38,10 @@ set -eu
 # We require various tools mandated by POSIX, such as `uname`, `sed`, etc.
 
 # Shellcheck:
-#   SC3043: we use `local`.  It's a known portability limitation but it's sane.
 #   SC2064: we are deliberately expanding the trap string at set time
+#   SC2237: I've too many memories of [ -z "..." ] not being available,
+#           so am sticking with negated -n
+#   SC3043: we use `local`.  It's a known portability limitation but it's sane.
 #
 # Based on knowledge that we won't put non-ASCII, quotes,
 # or internal whitespace into our channel files, we'll use:
