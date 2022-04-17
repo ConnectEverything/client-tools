@@ -13,6 +13,10 @@
 
 #Requires -RunAsAdministrator
 
+param(
+	[String]$Secret
+)
+
 $ErrorActionPreference = 'Stop'
 $CurrentNightlyUrl = "https://get-nats.io/current-nightly"
 $PlatformsUrl = "https://get-nats.io/synadia-nats-platforms.json"
@@ -26,6 +30,11 @@ $NscExe = "nsc.exe"
 $NatsExe = "nats.exe"
 $NscZip = "nsc.zip"
 $NatsZip = "nats.zip"
+
+$NscEnvOperatorName = "synadia"
+if ( $env:NSC_OPERATOR_NAME ) {
+	$NscEnvOperatorName = $env:NSC_OPERATOR_NAME
+}
 
 # ----------------------------------------------------------------------------------------------------
 # Functions
@@ -187,5 +196,10 @@ if ( !(Test-Path $dataDir) ) {
 	New-Item $dataDir -ItemType Directory | Out-Null
 }
 "$channel" | Out-File -FilePath $dataFile
+
+if ( $Secret ) {
+	nsc load --profile "nsc://${NscEnvOperatorName}?secret=$Secret"
+	nats context ls
+}
 
 Write-Host "Done!`r`n"

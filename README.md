@@ -1,8 +1,15 @@
 Client Tools
 ============
 
+_Unix_
+
 ```sh
 curl -fSs https://get-nats.io/install.sh | sh
+```
+
+_Windows_
+```powershell
+Invoke-WebRequest -Uri " https://get-nats.io/install.ps1" -OutFile "install.ps1"; .\install.ps1
 ```
 
 This git repository holds build scripts and installers for client tools, as a
