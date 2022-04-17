@@ -436,6 +436,11 @@ the Web-of-Trust requires effort to set up, and some modern keyservers drop
 those signatures, the WKD federated key distribution system works and we have
 this setup for the `nats.io` domain.
 
+Distributing revocation in a timely manner, and ensuring that the revocations
+reach who they need to reach, is near impossible.  We can publish revocations
+to the public keyservers, and in our WKD hosting, but not ensure those
+propagate out.
+
 ### ssh-keygen -Y sign
 
 OpenSSH 8.0 and newer support signing objects, such as files.  Support for
@@ -468,3 +473,9 @@ support on "Ubuntu 20.04 or newer OSes" then this is a viable path to explore.
 7. For release artifacts, sign the checksum file.
    + rename cosign `$FILE.sig` to `$FILE.cosign.sig`
    + rename ssh `$FILE.sig` to `$FILE.ssh-ed25519.sig`
+8. For compatibility with "expectations" we might additionally sign with an
+   OpenPGP implementation, but _not_ use that in our own installer.  This
+   would be a way to let people verify independently, using tools and
+   mechanisms they trust, not for our installers.
+   + Perhaps one common key, but a signing sub-key for each product, which can
+     be independently revoked
