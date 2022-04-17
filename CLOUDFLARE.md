@@ -32,7 +32,6 @@ domain at the `nats-tools.pages.dev` site.
 There is a rewrite rule in place for `www.get-nats.io` to redirect to `get-nats.io`;
 for client traffic to reach the rewrite rule, we need something in DNS.
 
-<s>
 The `www` entry is an A pointing as CF-proxied to `192.0.2.1`, because as
 <https://community.cloudflare.com/t/redirecting-one-domain-to-another/81960>
 points out, we don't need a real backend here.
@@ -42,12 +41,9 @@ points out, we don't need a real backend here.
 So we configure 192.0.2.1 because it acts as a sentinel, we know something is
 up when we see it and no backend traffic will flow out from this proxied host;
 the **Rules** item for the site has the redirect.
-</s>
 
-While this was tested at some point, in 2022-04 it was not working.  Enabling
-`www.get-nats.io` for the _Pages_ site required replacing the A record with a
-CNAME pointing to the same `nats-tools.pages.dev` target.  This was done.
-(2022-04-16: still pending verification of the DNS change)
+**NOTE WELL**: this means that any curl invocation touching `www` will need
+the `-L` option to follow redirects, and we don't specify `-L` by default.
 
 
 ### misc DNS
