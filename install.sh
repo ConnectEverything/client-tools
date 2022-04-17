@@ -407,22 +407,22 @@ curl_cmd() {
 
 curl_cmd_progress() {
   if [ "$VERBOSE" -lt 1 ]; then
-    curl_cmd --silent --show-error "$@" || return $?
+    curl_cmd --silent --show-error --fail --location "$@" || return $?
     return 0
   fi
   if ! [ -t 0 ]; then
     # we risk some strange output left-over with curl and progress bars when it can't determine
     # the full width of the terminal, so we smooth things over
     if [ -t 2 ]; then
-      curl_cmd --progress-bar "$@" <&2
+      curl_cmd --progress-bar --fail --location "$@" <&2
     elif [ -t 1 ]; then
-      curl_cmd --progress-bar "$@" <&1
+      curl_cmd --progress-bar --fail --location "$@" <&1
     else
       # give up
-      curl_cmd --progress-bar "$@"
+      curl_cmd --progress-bar --fail --location "$@"
     fi
   else
-    curl_cmd --progress-bar "$@"
+    curl_cmd --progress-bar --fail --location "$@"
   fi
 }
 
@@ -657,7 +657,7 @@ fetch_and_validate_files() {
     . "$varfile"
 
     if [ -n "$checksumfile" ]; then
-      curl_cmd_progress --fail --location \
+      curl_cmd_progress \
         --output "./$zipfile" "${urldir%/}/$zipfile" \
         --output "./$checksumfile" "${urldir%/}/$checksumfile"
       # NB: we are currently hard-coding an assumption of SHA256.
@@ -673,7 +673,7 @@ fetch_and_validate_files() {
         die "aborting rather than install corrupted file; please report this"
       fi
     else
-      curl_cmd_progress --fail --location \
+      curl_cmd_progress \
         --output "./$zipfile" "${urldir%/}/$zipfile"
       note "!!! no checksum file available !!!"
     fi
@@ -737,7 +737,7 @@ write_completions() {
 # SIDE EFFECT: sets $WROTE_COMPLETION_ZSH
 write_completions_zsh() {
   WROTE_COMPLETION_ZSH=''
-  [ -f "$HOME/.zshrc" ] || return 0
+  [ -f "$HOME/.zshrc" ] || [ -f "$HOME/.zshenv" ] || return 0
   have_command zsh || return 0
   local site_dir
   site_dir="$(zsh -fc 'print -r -- ${fpath[(r)*/site-functions]}')"
@@ -755,7 +755,8 @@ write_completions_zsh() {
   fi
 
   # Ideally, we'd have a signature for this.
-  curl -O "$site_dir/_nats" "$COMPLETION_ZSH_NATS_URL"
+  note "downloading to: $site_dir/_nats"
+  curl_cmd_progress -o "$site_dir/_nats" "$COMPLETION_ZSH_NATS_URL"
   chmod 0755 "$site_dir/_nats"
   WROTE_COMPLETION_ZSH="$site_dir/_nats"
 }
