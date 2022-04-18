@@ -837,6 +837,7 @@ load_context() {
   note "setting nats context"
   "$opt_install_dir/nsc" load --profile "nsc://$nsc_env_operator_name?secret=$nsc_env_secret"
   "$opt_install_dir/nats" context ls
+  "$opt_install_dir/nats" context show
   note 'All set!'
 }
 
