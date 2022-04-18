@@ -11,6 +11,15 @@ _Windows_
 ```powershell
 Invoke-WebRequest -Uri " https://get-nats.io/install.ps1" -OutFile "install.ps1"; .\install.ps1
 ```
+Depending on your PowerShell settings, you may prevented from running the install script because it is currently not digitally signed.
+To work around this, you can change the settings for the current shell session with this command:
+```powershell
+Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass
+```
+You can read about execution policies here: https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.core/about/about_execution_policies
+
+
+## About
 
 This git repository holds build scripts and installers for client tools, as a
 unified approach replacing the old nsc+nats installers.
