@@ -17,7 +17,8 @@ set -eu
 # limitations under the License.
 
 # This is an installer script for client tools for the NATS.io ecosystem.
-# By default, we install binaries to ~/.local/bin (per XDG).
+# By default, we install binaries to ~/.local/bin (per XDG), unless
+# invoked as root, in which case we install to /usr/local/bin.
 # Invoke with -h to see help.
 
 # We are sh, not bash; we might want bash/zsh for associative arrays but some
@@ -72,7 +73,8 @@ readonly SUPPORTED_OSTYPES="linux darwin freebsd windows"
 
 # Where to install to, by default
 : "${HOME:=/home/$(id -un)}"
-readonly DEFAULT_BINARY_INSTALL_DIR="$HOME/.local/bin"
+readonly DEFAULT_USER_BINARY_INSTALL_DIR="$HOME/.local/bin"
+readonly DEFAULT_ROOT_BINARY_INSTALL_DIR="/usr/local/bin"
 readonly DEFAULT_NATS_CONFIG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/nats"
 
 readonly COMPLETION_ZSH_NATS_URL='https://get-nats.io/zsh.complete.nats'
@@ -81,6 +83,12 @@ readonly ZSH_EXTRA_SETUP_URL='https://get-nats.io/zshrc'
 # Shell variables referenced below as optional:
 #  SECRET -- used for loading an account generated elsewhere
 #  NSC_OPERATOR_NAME -- used to override the operator when using $SECRET loading
+
+if [ "$(id -u)" -eq "0" ]; then
+  readonly DEFAULT_BINARY_INSTALL_DIR="$DEFAULT_ROOT_BINARY_INSTALL_DIR"
+else
+  readonly DEFAULT_BINARY_INSTALL_DIR="$DEFAULT_USER_BINARY_INSTALL_DIR"
+fi
 
 ### END OF CONFIGURATION ###
 
