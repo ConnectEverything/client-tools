@@ -5,7 +5,7 @@
 # We cover:
 #  * The _nats tab-completion
 #  * Setting up NATS_CONTEXT tab-completion
-#  * run-help integration for nants
+#  * run-help integration for nats
 
 zmodload zsh/parameter   # $dirstack, $commands, $functions
 
