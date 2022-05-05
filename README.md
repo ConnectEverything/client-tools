@@ -62,6 +62,13 @@ See also Issues opened against this repo; in particular, issue 3 covers
 artifact signing.  See also [SIGNING.md](SIGNING.md).
 
 
+## Public Visibility
+
+Logins in CloudFlare and Checkly, within accounts owned by Synadia
+Communications, are needed to view status there.  Everything else should
+be visible to the NATS public.
+
+
 ## Deploy on: push
 
 The script `cdn-site-build` is run by CloudFlare to build content to
@@ -208,7 +215,9 @@ If it hasn't been recreated, then the monitoring history should be visible at:
 An installer needs to be able to fetch:
 
  1. <https://get-nats.io/synadia-nats-channels.conf>
-    + Variants possible, see below
+    + Variants possible, see below; these are currently:
+      - <https://get-nats.io/synadia-nats-channels.json>
+      - <https://get-nats.io/synadia-nats-platforms.json>
  2. <https://get-nats.io/current-nightly>
 
 and to write the current channel out to `~/.config/nats/install-channel.txt`
