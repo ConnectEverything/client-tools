@@ -59,7 +59,7 @@ approaches, it is probably fine, so we're not currently planning to change
 things.
 
 See also Issues opened against this repo; in particular, issue 3 covers
-artifact signing.  See also [SIGNING.md][SIGNING.md].
+artifact signing.  See also [SIGNING.md](SIGNING.md).
 
 
 ## Deploy on: push
