@@ -396,8 +396,25 @@ main() {
     echo "::endgroup::"
     # can point nightly-$NIGHTLY_DATE at that commit, and nightly too ... if we're happy to have a dynamically moving git tag in our repos (a big if)
     echo "::set-output name=nightly-version::$NIGHTLY_DATE"
+    if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+      printf '## :shipit: Published: %s\n\n' "${NIGHTLY_DATE}" >> "$GITHUB_STEP_SUMMARY"
+    fi
   else
     stderr "skipping publishing, per request"
+    if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+      printf '## :carousel_horse: Unpublished: %s\n\n' "${NIGHTLY_DATE}" >> "$GITHUB_STEP_SUMMARY"
+    fi
+  fi
+
+  if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
+    {
+      echo "| Tool | Commit |"
+      echo "| ---- | ------ |"
+      for tool in "${!tool_repo_slugs[@]}"; do
+        printf '| %s | %s |\n' "$tool" "${tool_current_commit[$tool]}"
+      done
+      echo
+    } >> "$GITHUB_STEP_SUMMARY"
   fi
 
   stderr "done"
