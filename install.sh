@@ -24,7 +24,7 @@ set -eu
 # We are sh, not bash; we might want bash/zsh for associative arrays but some
 # OSes are currently on bash3 and removing bash, while we don't want a zsh
 # dependency; so we're sticking to "pretty portable shell" even if it's a
-# little more convoluted as a result.
+# "little" more convoluted as a result.
 #
 # We rely upon the following beyond basic POSIX shell:
 #  1. A  `local`  command (built-in to shell; almost all sh does have this)
@@ -50,10 +50,6 @@ set -eu
 #   SC2086: we're using space-delimited arrays-in-strings, not ksh-ish arrays
 #           (oh how we wish general shell arrays could be assumed available)
 
-# This location is temporary during development, we will have a better name
-# when we pick one, but this lets me get started with integration on the free
-# tier and figure out the moving pieces
-#
 # The CHANNELS_URL is the file defining current versions of stuff, and is edited
 # by humans and deployed
 readonly CHANNELS_URL='https://get-nats.io/synadia-nats-channels.conf'
@@ -97,9 +93,19 @@ fi
 
 ### END OF CONFIGURATION ###
 
+use_color=true  # we will change this below, near options processing
 progname="$(basename "$0" .sh)"
 note() { printf >&2 '%s: %s\n' "$progname" "$*"; }
-die() { note "$@"; exit 1; }
+warn() {
+  echo >&2
+  if $use_color; then
+    printf >&2 '\e[31m%s: \e[1m%s\e[0m\n' "$progname" "$*"
+  else
+    note "$@"
+  fi
+  echo >&2
+}
+die() { warn "$@"; exit 1; }
 
 # Handle the "pipe to shell" pattern
 case "$progname" in
@@ -114,6 +120,11 @@ main() {
   # error early if missing commands; put it after option processing
   # so that if we need to, we can add options to handle alternatives.
   check_have_external_commands
+
+  if $opt_secret_only; then
+    load_context
+    return
+  fi
 
   # We do not chdir to the tmp_dir, because the caller can provide
   # command-line flags with paths to files which might be relative,
@@ -140,18 +151,25 @@ main() {
 
 usage() {
   local ev="${1:-1}"
+  local prefix="Usage: $progname"
+  local indent="$(printf '%*s' "${#prefix}" ' ')"
   [ "$ev" = 0 ] || exec >&2
   cat <<EOUSAGE
-Usage: $progname [-fqv] [-c <channel>] [-d <dir>] [-C <dir>] [-a <arch>] [-o <ostype>]
+$prefix [-fqsv] [-c <channel>] [-d <dir>] [-C <dir>] \\
+$indent [-a <arch>] [-o <ostype>] \\
+$indent [-N <date>]
  -f           force, don't prompt before installing over files
-              (if the script is piped in on stdin, force will be forced on)
- -v           be more verbose
+              (defaults true if-and-only-if the script is piped in on stdin)
+ -s           secrets-only, do not update binaries
  -q           be more quiet
+ -v           be more verbose
  -c channel   channel to install ("stable", "nightly")
  -d dir       directory to download into [default: $DEFAULT_BINARY_INSTALL_DIR]
  -C configdir directory to keep configs in [default: $DEFAULT_NATS_CONFIG_DIR]
- -o ostype    override the OS detection [allowed: $SUPPORTED_OSTYPES]
  -a arch      force choosing a specific processor architecture [allowed: $SUPPORTED_ARCHS]
+ -o ostype    override the OS detection [allowed: $SUPPORTED_OSTYPES]
+ -N date      when installing nightlies, override today's date [format: YYYYMMDD]
+              (default is value of <$NIGHTLY_URL>)
 EOUSAGE
 # Developer only, not documented in help:
 #  -F chanfile  use a local channel file instead of the hosted URL
@@ -159,6 +177,17 @@ EOUSAGE
 }
 
 VERBOSE=1
+if [ -n "${NO_COLOR:-}" ]; then
+  use_color=false
+elif [ -n "${NOCOLOR:-}" ]; then
+  use_color=false
+elif [ -n "${NO_COLOUR:-}" ]; then
+  use_color=false
+elif [ -n "${NOCOLOUR:-}" ]; then
+  use_color=false
+elif ! [ -t 1 ]; then
+  use_color=false
+fi
 opt_install_dir=''
 opt_config_dir=''
 opt_channel=''
@@ -167,10 +196,11 @@ opt_nightly_date=''
 opt_arch=''
 opt_ostype=''
 opt_force=false
+opt_secret_only=false
 nsc_env_secret="${SECRET:-}"
 nsc_env_operator_name="${NSC_OPERATOR_NAME:-synadia}"
 parse_options() {
-  while getopts ':a:c:d:fho:qvC:F:N:' arg; do
+  while getopts ':a:c:d:fho:qsvC:F:N:' arg; do
     case "$arg" in
       (h) usage 0 ;;
 
@@ -186,6 +216,7 @@ parse_options() {
       (f) opt_force=true ;;
       (o) opt_ostype="$OPTARG" ;;
       (q) VERBOSE=$(( VERBOSE - 1 )) ;;
+      (s) opt_secret_only=true ;;
       (v) VERBOSE=$(( VERBOSE + 1 )) ;;
       (C) opt_config_dir="$OPTARG" ;;
       (F) opt_channel_file="$OPTARG" ;;
@@ -845,10 +876,13 @@ store_channel() {
 
 load_context() {
   if [ "$nsc_env_secret" = "" ]; then
+    if $opt_secret_only; then
+      die "asked to only load secrets, but not given a secret to load"
+    fi
     return 0
   fi
   note "setting nats context"
-  "$opt_install_dir/nsc" load --profile "nsc://$nsc_env_operator_name?secret=$nsc_env_secret"
+  "$opt_install_dir/nsc" load --profile "nsc://$nsc_env_operator_name?secret=$nsc_env_secret" || die "nsc load failed"
   "$opt_install_dir/nats" context ls
   "$opt_install_dir/nats" context show
   note 'All set!'
