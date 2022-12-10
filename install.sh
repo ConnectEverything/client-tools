@@ -1,5 +1,5 @@
 #!/bin/sh
-# shellcheck disable=SC3043,SC2237
+# shellcheck disable=SC3043,SC2237,SC2295
 
 set -eu
 
@@ -49,6 +49,9 @@ set -eu
 #   SC2018/SC2019: we're using ASCII for our artifacts and OS/arch names
 #   SC2086: we're using space-delimited arrays-in-strings, not ksh-ish arrays
 #           (oh how we wish general shell arrays could be assumed available)
+#   SC2295: when doing token expansion from the config file, we replace static
+#           strings with no pattern characters in them, so this newer info
+#           diagnostic is missing that the inputs are known safe.
 
 # The CHANNELS_URL is the file defining current versions of stuff, and is edited
 # by humans and deployed
@@ -150,9 +153,9 @@ main() {
 }
 
 usage() {
-  local ev="${1:-1}"
-  local prefix="Usage: $progname"
-  local indent="$(printf '%*s' "${#prefix}" ' ')"
+  local ev="${1:-1}" prefix indent
+  prefix="Usage: $progname"
+  indent="$(printf '%*s' "${#prefix}" ' ')"
   [ "$ev" = 0 ] || exec >&2
   cat <<EOUSAGE
 $prefix [-fqsv] [-c <channel>] [-d <dir>] [-C <dir>] \\
