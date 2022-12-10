@@ -86,7 +86,14 @@ case "$service" in
 esac
 
 nats_decorate_flags_desc=( # this assumes zsh is-at-least 5.5
+	[help]='show help and exit'
+	[version]='show version and exit'
+
 	[context]='NATS user context'
+	[no-context]='Do not use current selected context'
+	[server]='NATS server URL to connect to'
+
+	# authentication options (using contexts provides defaults for these)
 	[tlscert]='TLS client auth public certificate'
 	[tlskey]='TLS client auth private key'
 	[tlsca]='TLS CA bundle to verify server cert'
@@ -94,9 +101,15 @@ nats_decorate_flags_desc=( # this assumes zsh is-at-least 5.5
 	[nkey]='filename containing NKey private key'
 	[user]='NATS username to authenticate as'
 	[password]='Password for NATS user'
+
 	[trace]='Trace API interactions'
-	[server]='NATS server URL to connect to'
 	[timeout]='time to wait for responses from NATS'
+	[connection-name]='set visible self-descriptive name in NATS connection'
+	[inbox-prefix]='custom inbox prefix to use'
+
+	[js-api-prefix]='JetStream API subject prefix'
+	[js-domain]='JetStream Domain (for transiting other NATS clusters)'
+	[js-event-prefix]='JetStream Advisories subject prefix'
 
 	# common sub-command flags
 	[yaml]='Produce YAML format output'
@@ -106,11 +119,15 @@ nats_decorate_flags_mutex=(
 	[server]='"(--server -s)"{-s,--server=}'
 )
 nats_decorate_flags_next=(
+	# if flag is not listed here, but is described above, then it's a boolean flag
 	[tlscert]='_files' [tlskey]='_files' [tlsca]='_files'
 	[creds]='_files' [nkey]='_files'
 	[user]=' ' [password]=' '
 	[server]=' '
 	[timeout]=' '
+	[connection-name]=' '
+	[inbox-prefix]=' '
+	[js-api-prefix]=' ' [js-domain]=' ' [js-event-prefix]=' '
 	[context]='_nats_context_names'
 )
 
