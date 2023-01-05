@@ -5,6 +5,7 @@
 # We cover:
 #  * The _nats tab-completion
 #  * Setting up NATS_CONTEXT tab-completion
+#  * Other zstyle tuning
 #  * run-help integration for nats
 
 zmodload zsh/parameter   # $dirstack, $commands, $functions
@@ -55,6 +56,20 @@ if (( ${+functions[_nats]} )); then
   fi
   unset n1
 fi
+
+
+# Zsh completion lets you set tuning options in a way which depends upon context
+#
+# If you set the verbose completion option, the tab-completion of NATS context
+# names will include your context descriptions.
+#
+# From version v0.0.36 of the NATS CLI, it supports the --socks-proxy option for
+# outbound connections.  Our completion function sets this to use URL completion,
+# which you can tune using the 'urls' style.
+#
+# zstyle ':completion::complete:nats:*' verbose true
+# zstyle ':completion::complete:nats:option--socks-proxy-1:*' urls ~/.socks-proxies
+
 
 # Zsh has a built-in help system; in Emacs keybinding modes,
 # this is bound by default to ESC-h and ESC-H.  In vi keybinding modes,

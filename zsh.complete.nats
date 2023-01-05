@@ -106,6 +106,7 @@ nats_decorate_flags_desc=( # this assumes zsh is-at-least 5.5
 	[timeout]='time to wait for responses from NATS'
 	[connection-name]='set visible self-descriptive name in NATS connection'
 	[inbox-prefix]='custom inbox prefix to use'
+	[socks-proxy]='SOCKS5 proxy for connecting to NATS server'
 
 	[js-api-prefix]='JetStream API subject prefix'
 	[js-domain]='JetStream Domain (for transiting other NATS clusters)'
@@ -129,6 +130,7 @@ nats_decorate_flags_next=(
 	[inbox-prefix]=' '
 	[js-api-prefix]=' ' [js-domain]=' ' [js-event-prefix]=' '
 	[context]='_nats_context_names'
+	[socks-proxy]='_urls'
 )
 
 # We populate a complete set first, so that even if we don't have more details below,
