@@ -274,7 +274,7 @@ remove_signing_keys() {
 sign_artifact_cosign() {
   local artifact="${1:?}"
   extract_signing_keys
-  cosign sign-blob --key "$SIGNING_KEYS_DIR/nightlies-cosign.key" --output-signature "${artifact}.cosign.sig" "$artifact"
+  cosign sign-blob --yes --key "$SIGNING_KEYS_DIR/nightlies-cosign.key" --output-signature "${artifact}.cosign.sig" "$artifact"
 }
 
 sign_artifact_ssh() {
