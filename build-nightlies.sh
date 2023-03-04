@@ -173,7 +173,7 @@ build_one_tool() {
     return
   fi
 
-  goreleaser build --snapshot --rm-dist
+  goreleaser build --snapshot --clean
 }
 
 check_have_publish_credentials() {

@@ -99,7 +99,7 @@ The file `.github/workflows/nightly.yaml` manages a daily invocation of the
 script `build-nightlies.sh`.
 
 The script checks out a "pretty shallow" clone of the nsc and nats repos, and
-runs `goreleaser build --snapshot --rm-dist` to build the binaries.  Once that
+runs `goreleaser build --snapshot --clean` to build the binaries.  Once that
 has successfully completed, it creates ZIP files of all of them and creates a
 checksum file, with both the zips and the checksum having today's date as part
 of the filename.
