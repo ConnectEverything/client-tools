@@ -76,7 +76,7 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-go-
 
-      - name: Run nightlies build-and-release tool
+      - name: Run nightlies build-and-release tool (if scheduled)
         id: build-cron
         if: ${{ github.event_name == 'schedule' }}
         run: |
@@ -88,7 +88,7 @@ jobs:
           NIGHTLY_SIGNING_KEY_COSIGN: ${{ secrets.NIGHTLY_SIGNING_KEY_COSIGN }}
           NIGHTLY_SIGNING_KEY_SSH: ${{ secrets.NIGHTLY_SIGNING_KEY_SSH }}
 
-      - name: Run manual build-and-release tool
+      - name: Run manual build-and-release tool (if manual trigger)
         id: build-manual
         if: ${{ github.event_name == 'workflow_dispatch' }}
         run: |
