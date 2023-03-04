@@ -27,21 +27,27 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v3
         with:
+          # NB: the `fetch-depth: 0` setting is documented by goreleaser
+          # as a requirement, for the changelog feature to work correctly.
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v2
+        uses: actions/setup-go@v3
         with:
           # This should be quoted or use .x, but should not be unquoted.
           # Remember that a YAML bare float drops trailing zeroes.
           go-version: '1.19'
           check-latest: true
+          # As of v3 of this action, we could also use `go-version-file: # go.mod`
+          # and get the version from there, but that is semantically wrong: the
+          # version in the go.mod is the version of the compiler we're
+          # compatible to, and might often be one version behind current.
 
       - name: Install GoReleaser
         id: goreleaser-install
-        uses: goreleaser/goreleaser-action@v2
+        uses: goreleaser/goreleaser-action@v3
         with:
           distribution: goreleaser-pro
           version: latest
@@ -53,7 +59,7 @@ jobs:
 
       - name: Setup caching of Go modules and packages
         id: caching
-        uses: actions/cache@v2
+        uses: actions/cache@v3
         with:
           # Copy the path from that documented for an action we're not using; <https://github.com/mvdan/github-actions-golang>
           # In order:

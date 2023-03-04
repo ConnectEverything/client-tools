@@ -369,6 +369,9 @@ main() {
 
   # For the :: echo commands, see documentation at
   # <https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions>
+  # and <https://github.blog/changelog/2022-10-11-github-actions-deprecating-save-state-and-set-output-commands/>
+  # for the switch to environment files for some lower-a actions:
+  # <https://docs.github.com/en/actions/using-workflows/workflow-commands-for-github-actions#environment-files>
 
   # We do not publish in the first loop, so that we have complete consistent sets
   for tool in "${!tool_repo_slugs[@]}"; do
@@ -395,7 +398,7 @@ main() {
     publish_nightly_files_to_cloudflare
     echo "::endgroup::"
     # can point nightly-$NIGHTLY_DATE at that commit, and nightly too ... if we're happy to have a dynamically moving git tag in our repos (a big if)
-    echo "::set-output name=nightly-version::$NIGHTLY_DATE"
+    echo "nightly-version=$NIGHTLY_DATE" >> "$GITHUB_OUTPUT"
     if [[ -n "${GITHUB_STEP_SUMMARY:-}" ]]; then
       printf '## :shipit: Published: %s\n\n' "${NIGHTLY_DATE}" >> "$GITHUB_STEP_SUMMARY"
     fi
