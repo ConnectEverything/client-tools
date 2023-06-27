@@ -55,6 +55,10 @@ They were sane and what I was about to do manually.
 I added an MX of `0 .` to disable inbound email.
 The SRV support isn't flexible enough to let us publish `_client._smtp`.
 
+DNS history is kept via periodic state-dumps in the `ops-info` repository,
+in the `StateDumps/DNS/` directory.
+See the `dump_cloudflare` script there.
+
 
 ### misc other
 

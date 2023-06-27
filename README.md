@@ -374,7 +374,7 @@ is:
           "nsc": {
             "executable": "nsc",
             "zip_url": "https://github.com/nats-io/nsc/releases/download/2.6.1/nsc-darwin-amd64.zip",
-            "checksum_url": "https://github.com/nats-io/nsc/releases/download/2.6.1/nsc-checksums.txt"
+            "checksum_url": "https://github.com/nats-io/nsc/releases/download/2.6.1/nsc-checksums.txt",
             "version_tag": "2.6.1",
             "version_bare": "2.6.1"
           }
