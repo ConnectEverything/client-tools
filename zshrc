@@ -95,7 +95,14 @@ if (( ${+functions[run-help]} )); then
   if (( ${+commands[nats]} )); then
     function run-help-nats {
       if [[ $# -eq 0 ]]; then
-        nats --help | sed -n '/^Commands/q;p' ; printf '\n=== nats cheat ===\n\n' ; nats cheat
+        if (( ${+commands[nroff]} )); then
+          # full manual-page style view
+          nats --help-man | nroff -Tutf8 -mandoc -t -e -p
+        else
+          nats --help
+        fi
+        printf '\f\n=== nats cheat ===\n\n'
+        nats cheat
       else
         local -a cmdwords=(); local x; for x; do [[ $x != -* ]] || break; cmdwords+=("$x"); done
         nats "${cmdwords[@]}" --help ; printf '\n=== nats cheat ===\n\n' ; nats cheat "$1"
