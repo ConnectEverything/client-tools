@@ -27,18 +27,18 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           # NB: the `fetch-depth: 0` setting is documented by goreleaser
           # as a requirement, for the changelog feature to work correctly.
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v4
         with:
           # This should be quoted or use .x, but should not be unquoted.
           # Remember that a YAML bare float drops trailing zeroes.
-          go-version: '1.19'
+          go-version: '1.21'
           check-latest: true
           # As of v3 of this action, we could also use `go-version-file: # go.mod`
           # and get the version from there, but that is semantically wrong: the
@@ -47,7 +47,7 @@ jobs:
 
       - name: Install GoReleaser
         id: goreleaser-install
-        uses: goreleaser/goreleaser-action@v3
+        uses: goreleaser/goreleaser-action@v5
         with:
           distribution: goreleaser-pro
           version: latest
@@ -57,24 +57,9 @@ jobs:
         id: cosign-install
         uses: sigstore/cosign-installer@main
 
-      - name: Setup caching of Go modules and packages
-        id: caching
-        uses: actions/cache@v3
-        with:
-          # Copy the path from that documented for an action we're not using; <https://github.com/mvdan/github-actions-golang>
-          # In order:
-          # * Module download cache
-          # * Build cache (Linux)
-          # * Build cache (Mac)
-          # * Build cache (Windows)
-          path: |
-            ~/go/pkg/mod
-            ~/.cache/go-build
-            ~/Library/Caches/go-build
-            %LocalAppData%\go-build
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+      # As of actions/setup-go@v4, go modules and build outputs are cached by default.
+      # Prior to the update to use that, we used actions/cache@v3 here for a step:
+      #   name: Setup caching of Go modules and packages
 
       - name: Run nightlies build-and-release tool (if scheduled)
         id: build-cron
