@@ -88,3 +88,18 @@ jobs:
           NIGHTLY_DATE: ${{ github.event.inputs.nightly-id }}
           # NB: IF ADDING HERE, PROBABLY ALSO ADD TO 'schedule' INVOCATION ABOVE
 
+  report_build_failure:
+    if: failure()
+    runs-on: ubuntu-latest
+    permissions: {}
+    needs: [nightly_release]
+    steps:
+      - name: Notify Synadia Communications Slack
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_SYNADIA_BUILDS_GITHUB }}
+          SLACK_USERNAME: "client-tools-nightlies-builder"
+          SLACK_ICON_EMOJI: ":moon:"
+          SLACK_COLOR: "#FF0000"
+          SLACK_MESSAGE: "client-tools nightly release build failed"
+
