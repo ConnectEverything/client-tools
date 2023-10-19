@@ -55,7 +55,9 @@ local -ra want_context=(
 
 local -r nats_ctxdir="${XDG_CONFIG_HOME:-$HOME/.config}/nats/context"
 
-nats_contexts=( "$nats_ctxdir"/*(N:t:r) )
+# Beware that the edit facility will leave .bak files behind, so
+# restrict this to only JSON contexts.
+nats_contexts=( "$nats_ctxdir"/*.json(N:t:r) )
 
 # *IF* we revert back to using jq, then:
 # TODO: come up with a cache expiration strategy and integrate this with use-cache
