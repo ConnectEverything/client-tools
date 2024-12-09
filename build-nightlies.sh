@@ -62,6 +62,7 @@ Usage: $progname [-d <date>] [-rP]
   -r          reuse existing build
   -P          don't publish (don't need API keys)
   -S          don't sign (don't need private signing keys)
+  -p N        parallelism to pass to goreleaser
 
 The DATE should be in YYYYMMDD format or, for extra runs on a given day,
 in YYYYMMDD_NNN format.
@@ -78,10 +79,16 @@ parse_options() {
   local arg OPTIND
   opt_publish=1
   opt_sign=1
-  while getopts ':d:hrPS' arg; do
+  opt_parallelism=''
+  while getopts ':d:hp:rPS' arg; do
     case "$arg" in
       h) usage 0 ;;
       d) NIGHTLY_DATE="$OPTARG" ;;
+      p)
+        [[ "$OPTARG" =~ ^[0-9]+$ ]] || die_n "$EX_USAGE" "need -p to be a number";
+        (( "$OPTARG" > 0 )) || die_n "$EX_USAGE" "need -p to be a positive number";
+        opt_parallelism="$OPTARG"
+        ;;
       r) USE_EXISTING_BUILD=1 ;;
       P) opt_publish=0 ;;
       S) opt_sign=0 ;;
@@ -161,6 +168,7 @@ build_one_tool() {
   local tool="$1"
   shift
   local clone_dir dist_dir
+  local -a build_flags
   clone_dir="$(dir_for_tool "$tool")"
   cd "$clone_dir"
   if [[ -n "${SKIP_BUILD:-}" ]]; then
@@ -173,7 +181,11 @@ build_one_tool() {
     return
   fi
 
-  goreleaser build --snapshot --clean
+  build_flags=(--snapshot --clean)
+  if [[ -n "${opt_parallelism:-}" ]]; then
+    build_flags+=(--parallelism "$opt_parallelism")
+  fi
+  goreleaser build "${build_flags[@]}"
 }
 
 check_have_publish_credentials() {

@@ -8,8 +8,8 @@ on:
         required: true
         type: string
   schedule:
-    - cron: "33 4 * * *"
-      # 2022-08-08: want this to run again soon, so moved from "33 2" to "33 4", can be reverted any time after this
+    # Keep this during US working hours
+    - cron: "33 10 * * *"
 
 permissions:
   # Control the GITHUB_TOKEN permissions.
@@ -34,11 +34,12 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Go
-        uses: actions/setup-go@v4
+        uses: actions/setup-go@v5
+          # v5 over v4 updates the Node runtime from node16 to node20.
         with:
           # This should be quoted or use .x, but should not be unquoted.
           # Remember that a YAML bare float drops trailing zeroes.
-          go-version: '1.22'
+          go-version: '1.23'
           check-latest: true
           # As of v3 of this action, we could also use `go-version-file: # go.mod`
           # and get the version from there, but that is semantically wrong: the
@@ -50,11 +51,7 @@ jobs:
         uses: goreleaser/goreleaser-action@v6
         with:
           distribution: goreleaser-pro
-          # 2024-06-05: goreleaser v2 is out, and makes deprecations fatal.
-          # Our build-nightlies.sh invokes goreleaser in the repos for the nsc
-          # and natscli tools, so we can't update until both of those are
-          # deprecation-free under v1.26.2
-          version: "~> v1"
+          version: "~> v2"
           install-only: true
 
       - name: Install cosign
