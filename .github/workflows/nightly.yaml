@@ -8,8 +8,13 @@ on:
         required: true
         type: string
   schedule:
-    # Keep this during US working hours
-    - cron: "33 10 * * *"
+    # Keep this during US working hours, but ideally within EU too.
+    #  * Note that the cron spec is interpreted as being in UTC.
+    #  * The USA East Coast is either 5 or 4 hours behind UTC.
+    #  * Poland uses Central European Time, so is either 1 or 2 hours ahead of UTC.
+    #  * So if we pick around 14:30ish UTC, that's at latest 4.30pm Poland, at soonest 9.30am New York.
+    # Definitely not a "nightly", more like "daily", but this works for being able to sensibly alert without shenanigans when things go wrong.
+    - cron: "33 14 * * *"
 
 permissions:
   # Control the GITHUB_TOKEN permissions.
