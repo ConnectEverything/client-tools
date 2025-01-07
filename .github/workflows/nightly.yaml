@@ -37,6 +37,8 @@ jobs:
           # NB: the `fetch-depth: 0` setting is documented by goreleaser
           # as a requirement, for the changelog feature to work correctly.
           fetch-depth: 0
+          # We don't need to work with the git remote after this, so:
+          persist-credentials: false
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -50,6 +52,12 @@ jobs:
           # and get the version from there, but that is semantically wrong: the
           # version in the go.mod is the version of the compiler we're
           # compatible to, and might often be one version behind current.
+          #
+          # Caching: we are making release artifacts, and unfortunately we need
+          # to ensure that the cache is not poisonable.
+          # We can't override the key with a custom prefix, to split away from PR caches.
+          # So, regretably, we disable the cache.
+          cache: false
 
       - name: Install GoReleaser
         id: goreleaser-install
