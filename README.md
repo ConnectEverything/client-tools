@@ -48,6 +48,19 @@ pointing to invalid nightlies after a failed build, we publish a simple
 nightly version file to the CDN too.
 
 
+## Dependency Cycle: natscli
+
+Note that the natscli repo's `.goreleaser.yml` file now depends upon this site
+for all builds, to fetch the zsh completion.
+(See <https://github.com/nats-io/natscli/pull/1227>)
+
+If moving or turning down this repo, address that dependency.
+
+In practice, as long as the site remains up, there is no "cycle": our nightly
+builds depend upon the natscli GoReleaser configuration, which depends upon
+our static site.
+
+
 ## Future Work
 
 If recreating this now, I might put the entire site into the KV store,
