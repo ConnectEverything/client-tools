@@ -32,7 +32,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           # NB: the `fetch-depth: 0` setting is documented by goreleaser
           # as a requirement, for the changelog feature to work correctly.
@@ -41,7 +41,7 @@ jobs:
           persist-credentials: false
 
       - name: Set up Go
-        uses: actions/setup-go@v5
+        uses: actions/setup-go@d35c59abb061a4a6fb18e82ac0862c26744d6ab5 # v5.5.0
           # v5 over v4 updates the Node runtime from node16 to node20.
         with:
           # This should be quoted or use .x, but should not be unquoted.
@@ -61,7 +61,7 @@ jobs:
 
       - name: Install GoReleaser
         id: goreleaser-install
-        uses: goreleaser/goreleaser-action@v6
+        uses: goreleaser/goreleaser-action@9c156ee8a17a598857849441385a2041ef570552 # v6.3.0
         with:
           distribution: goreleaser-pro
           version: "~> v2"
@@ -69,7 +69,7 @@ jobs:
 
       - name: Install cosign
         id: cosign-install
-        uses: sigstore/cosign-installer@main
+        uses: sigstore/cosign-installer@3454372f43399081ed03b604cb2d021dabca52bb # v3.8.2
 
       # As of actions/setup-go@v4, go modules and build outputs are cached by default.
       # Prior to the update to use that, we used actions/cache@v3 here for a step:
@@ -109,7 +109,7 @@ jobs:
     needs: [nightly_release]
     steps:
       - name: Notify Synadia Communications Slack
-        uses: rtCamp/action-slack-notify@v2
+        uses: rtCamp/action-slack-notify@e31e87e03dd19038e411e38ae27cbad084a90661 # v2.3.3
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK_SYNADIA_BUILDS_GITHUB }}
           SLACK_USERNAME: "client-tools-nightlies-builder"
