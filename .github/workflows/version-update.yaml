@@ -90,7 +90,7 @@ jobs:
           commit-message: |
             Update NATS tool versions
 
-            - natscli: ${{ steps.check_current.outputs.current_nats }} → ${{ steps.get_releases.outputs.release_natscli }}
+            - natscli: ${{ steps.check_current.outputs.current_natscli }} → ${{ steps.get_releases.outputs.release_natscli }}
             - nsc: ${{ steps.check_current.outputs.current_nsc }} → ${{ steps.get_releases.outputs.release_nsc }}
 
           title: "Update NATS tool versions"
@@ -99,7 +99,7 @@ jobs:
 
             | Tool | Current | New |
             |------|---------|-----|
-            | natscli | `${{ steps.check_current.outputs.current_nats }}` | `${{ steps.get_releases.outputs.release_natscli }}` |
+            | natscli | `${{ steps.check_current.outputs.current_natscli }}` | `${{ steps.get_releases.outputs.release_natscli }}` |
             | nsc | `${{ steps.check_current.outputs.current_nsc }}` | `${{ steps.get_releases.outputs.release_nsc }}` |
 
             **Release Notes:**
