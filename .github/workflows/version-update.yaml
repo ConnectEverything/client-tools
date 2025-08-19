@@ -7,70 +7,78 @@ on:
   workflow_dispatch:
     # Allow manual triggering
 
-permissions:
-  contents: write
-  pull-requests: write
+permissions: {}
 
 jobs:
   check_versions:
+    name: Update
     runs-on: ubuntu-latest
-    
+
+    permissions:
+      contents: write
+      pull-requests: write
+
     steps:
       - name: Checkout code
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
+          # Need credentials preserved, to push a branch with changes
           persist-credentials: true
-          token: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Get latest releases
         id: get_releases
+        # We use gh rather than curl, so that our requests can be authenticated and avoid anonymous rate limits
         run: |
+          latest() { gh release --repo "$1" view --json tagName --jq .tagName; }
           # Get latest natscli release
-          NATS_RELEASE=$(curl -s https://api.github.com/repos/nats-io/natscli/releases/latest | jq -r .tag_name)
-          echo "nats_release=$NATS_RELEASE" >> $GITHUB_OUTPUT
-          
+          RELEASE_NATSCLI="$(latest nats-io/natscli)"
+          echo "release_natscli=$RELEASE_NATSCLI" >> $GITHUB_OUTPUT
+
           # Get latest nsc release
-          NSC_RELEASE=$(curl -s https://api.github.com/repos/nats-io/nsc/releases/latest | jq -r .tag_name)
-          echo "nsc_release=$NSC_RELEASE" >> $GITHUB_OUTPUT
-          
-          echo "Latest natscli release: $NATS_RELEASE"
-          echo "Latest nsc release: $NSC_RELEASE"
+          RELEASE_NSC="$(latest nats-io/nsc)"
+          echo "release_nsc=$RELEASE_NSC" >> $GITHUB_OUTPUT
+
+          echo "Latest natscli release: $RELEASE_NATSCLI"
+          echo "Latest nsc release: $RELEASE_NSC"
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check current versions
         id: check_current
         run: |
-          CURRENT_NATS=$(grep "^VERSION_stable_nats=" synadia-nats-channels.conf | cut -d'=' -f2)
-          CURRENT_NSC=$(grep "^VERSION_stable_nsc=" synadia-nats-channels.conf | cut -d'=' -f2)
-          
-          echo "current_nats=$CURRENT_NATS" >> $GITHUB_OUTPUT
+          CURRENT_NATSCLI=$(sed -n 's/^VERSION_stable_nats=//p' < synadia-nats-channels.conf)
+          CURRENT_NSC=$(sed -n 's/^VERSION_stable_nsc=//p' < synadia-nats-channels.conf)
+
+          echo "current_natscli=$CURRENT_NATSCLI" >> $GITHUB_OUTPUT
           echo "current_nsc=$CURRENT_NSC" >> $GITHUB_OUTPUT
-          
-          echo "Current natscli version: $CURRENT_NATS"
+
+          echo "Current natscli version: $CURRENT_NATSCLI"
           echo "Current nsc version: $CURRENT_NSC"
 
       - name: Update versions if needed
         id: update_versions
+        env:
+          RELEASE_NATSCLI: ${{ steps.get_releases.outputs.release_natscli }}
+          RELEASE_NSC: ${{ steps.get_releases.outputs.release_nsc }}
+          CURRENT_NATSCLI: ${{ steps.check_current.outputs.current_natscli }}
+          CURRENT_NSC: ${{ steps.check_current.outputs.current_nsc }}
+        shell: bash
         run: |
-          NATS_RELEASE="${{ steps.get_releases.outputs.nats_release }}"
-          NSC_RELEASE="${{ steps.get_releases.outputs.nsc_release }}"
-          CURRENT_NATS="${{ steps.check_current.outputs.current_nats }}"
-          CURRENT_NSC="${{ steps.check_current.outputs.current_nsc }}"
-          
           UPDATED=false
-          
-          if [ "$NATS_RELEASE" != "$CURRENT_NATS" ]; then
-            echo "Updating natscli from $CURRENT_NATS to $NATS_RELEASE"
-            sed -i "s/^VERSION_stable_nats=.*/VERSION_stable_nats=$NATS_RELEASE/" synadia-nats-channels.conf
+
+          if [[ "$RELEASE_NATSCLI" != "$CURRENT_NATSCLI" ]]; then
+            echo "Updating natscli from $CURRENT_NATSCLI to $RELEASE_NATSCLI"
+            sed -i "s/^VERSION_stable_nats=.*/VERSION_stable_nats=$RELEASE_NATSCLI/" synadia-nats-channels.conf
             UPDATED=true
           fi
-          
-          if [ "$NSC_RELEASE" != "$CURRENT_NSC" ]; then
-            echo "Updating nsc from $CURRENT_NSC to $NSC_RELEASE"
-            sed -i "s/^VERSION_stable_nsc=.*/VERSION_stable_nsc=$NSC_RELEASE/" synadia-nats-channels.conf
+
+          if [[ "$RELEASE_NSC" != "$CURRENT_NSC" ]]; then
+            echo "Updating nsc from $CURRENT_NSC to $RELEASE_NSC"
+            sed -i "s/^VERSION_stable_nsc=.*/VERSION_stable_nsc=$RELEASE_NSC/" synadia-nats-channels.conf
             UPDATED=true
           fi
-          
+
           echo "updated=$UPDATED" >> $GITHUB_OUTPUT
 
       - name: Create Pull Request
@@ -78,26 +86,29 @@ jobs:
         uses: peter-evans/create-pull-request@5e914681df9dc83aa4e4905692ca88beb2f9e91f # v7.0.5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
+
           commit-message: |
             Update NATS tool versions
-            
-            - natscli: ${{ steps.check_current.outputs.current_nats }} → ${{ steps.get_releases.outputs.nats_release }}
-            - nsc: ${{ steps.check_current.outputs.current_nsc }} → ${{ steps.get_releases.outputs.nsc_release }}
+
+            - natscli: ${{ steps.check_current.outputs.current_nats }} → ${{ steps.get_releases.outputs.release_natscli }}
+            - nsc: ${{ steps.check_current.outputs.current_nsc }} → ${{ steps.get_releases.outputs.release_nsc }}
+
           title: "Update NATS tool versions"
           body: |
             This PR updates the NATS tool versions in `synadia-nats-channels.conf` to the latest stable releases:
-            
+
             | Tool | Current | New |
             |------|---------|-----|
-            | natscli | `${{ steps.check_current.outputs.current_nats }}` | `${{ steps.get_releases.outputs.nats_release }}` |
-            | nsc | `${{ steps.check_current.outputs.current_nsc }}` | `${{ steps.get_releases.outputs.nsc_release }}` |
-            
+            | natscli | `${{ steps.check_current.outputs.current_nats }}` | `${{ steps.get_releases.outputs.release_natscli }}` |
+            | nsc | `${{ steps.check_current.outputs.current_nsc }}` | `${{ steps.get_releases.outputs.release_nsc }}` |
+
             **Release Notes:**
             - [natscli releases](https://github.com/nats-io/natscli/releases)
             - [nsc releases](https://github.com/nats-io/nsc/releases)
-            
+
             This PR was automatically created by the version update workflow.
-          branch: update-nats-tool-versions
+
+          branch: auto/update-tool-versions
           base: main
           delete-branch: true
           reviewers: ConnectEverything/Dev
