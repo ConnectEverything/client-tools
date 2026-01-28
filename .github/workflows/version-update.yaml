@@ -38,11 +38,11 @@ jobs:
           latest() { gh release --repo "$1" view --json tagName --jq .tagName; }
           # Get latest natscli release
           RELEASE_NATSCLI="$(latest nats-io/natscli)"
-          echo "release_natscli=$RELEASE_NATSCLI" >> $GITHUB_OUTPUT
+          echo >> "$GITHUB_OUTPUT" "release_natscli=$RELEASE_NATSCLI"
 
           # Get latest nsc release
           RELEASE_NSC="$(latest nats-io/nsc)"
-          echo "release_nsc=$RELEASE_NSC" >> $GITHUB_OUTPUT
+          echo >> "$GITHUB_OUTPUT" "release_nsc=$RELEASE_NSC"
 
           echo "Latest natscli release: $RELEASE_NATSCLI"
           echo "Latest nsc release: $RELEASE_NSC"
@@ -55,8 +55,8 @@ jobs:
           CURRENT_NATSCLI=$(sed -n 's/^VERSION_stable_nats=//p' < synadia-nats-channels.conf)
           CURRENT_NSC=$(sed -n 's/^VERSION_stable_nsc=//p' < synadia-nats-channels.conf)
 
-          echo "current_natscli=$CURRENT_NATSCLI" >> $GITHUB_OUTPUT
-          echo "current_nsc=$CURRENT_NSC" >> $GITHUB_OUTPUT
+          echo >> "$GITHUB_OUTPUT" "current_natscli=$CURRENT_NATSCLI"
+          echo >> "$GITHUB_OUTPUT" "current_nsc=$CURRENT_NSC"
 
           echo "Current natscli version: $CURRENT_NATSCLI"
           echo "Current nsc version: $CURRENT_NSC"
@@ -71,20 +71,31 @@ jobs:
         shell: bash
         run: |
           UPDATED=false
+          NL=$'\n'
+          declare -a which_updated=()
+          commit_message="Update NATS tool versions${NL}${NL}"  # paragraph, title vs body
+          pr_body_table=""
 
-          if [[ "$RELEASE_NATSCLI" != "$CURRENT_NATSCLI" ]]; then
-            echo "Updating natscli from $CURRENT_NATSCLI to $RELEASE_NATSCLI"
-            sed -i "s/^VERSION_stable_nats=.*/VERSION_stable_nats=$RELEASE_NATSCLI/" synadia-nats-channels.conf
+          update_one() {
+            local toolname="$1" config_name="$2" latest="$3" prior="$4"
+            if [[ "$latest" == "$prior" ]]; then
+              pr_body_table+="| ${toolname} | \`${prior}\` | (unchanged) |$NL"
+              return
+            fi
+            echo "Updating $toolname from $prior to $latest"
+            sed -i "s/^VERSION_stable_${config_name}=.*/VERSION_stable_${config_name}=${latest}/" synadia-nats-channels.conf
             UPDATED=true
-          fi
+            which_updated+=("$toolname")
+            commit_message+="- ${toolname}: ${prior} → ${latest}$NL"
+            pr_body_table+="| ${toolname} | \`${prior}\` | \`${latest}\` |$NL"
+          }
 
-          if [[ "$RELEASE_NSC" != "$CURRENT_NSC" ]]; then
-            echo "Updating nsc from $CURRENT_NSC to $RELEASE_NSC"
-            sed -i "s/^VERSION_stable_nsc=.*/VERSION_stable_nsc=$RELEASE_NSC/" synadia-nats-channels.conf
-            UPDATED=true
-          fi
+          update_one natscli nats "$RELEASE_NATSCLI" "$CURRENT_NATSCLI"
+          update_one nsc     nsc  "$RELEASE_NSC"     "$CURRENT_NSC"
 
-          echo "updated=$UPDATED" >> $GITHUB_OUTPUT
+          echo >> "$GITHUB_OUTPUT" "updated=$UPDATED"
+          echo >> "$GITHUB_OUTPUT" "which_tools=${which_updated[*]}"
+          echo >> "$GITHUB_OUTPUT" "commit=$(jq -Mcnr --arg cm "$commit_message" --arg table "$pr_body_table" '.message=$cm | .pr_body_table=$table')"
 
       - name: Create Pull Request
         if: steps.update_versions.outputs.updated == 'true'
@@ -93,19 +104,15 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
 
           commit-message: |
-            Update NATS tool versions
+            ${{ fromJSON(steps.update_versions.outputs.commit).message }}
 
-            - natscli: ${{ steps.check_current.outputs.current_natscli }} → ${{ steps.get_releases.outputs.release_natscli }}
-            - nsc: ${{ steps.check_current.outputs.current_nsc }} → ${{ steps.get_releases.outputs.release_nsc }}
-
-          title: "Update NATS tool versions"
+          title: "Update NATS tool versions: ${{ steps.update_versions.outputs.which_updated }}"
           body: |
             This PR updates the NATS tool versions in `synadia-nats-channels.conf` to the latest stable releases:
 
             | Tool | Current | New |
             |------|---------|-----|
-            | natscli | `${{ steps.check_current.outputs.current_natscli }}` | `${{ steps.get_releases.outputs.release_natscli }}` |
-            | nsc | `${{ steps.check_current.outputs.current_nsc }}` | `${{ steps.get_releases.outputs.release_nsc }}` |
+            ${{ fromJSON(steps.update_versions.outputs.commit).pr_body_table }}
 
             **Release Notes:**
             - [natscli releases](https://github.com/nats-io/natscli/releases)
