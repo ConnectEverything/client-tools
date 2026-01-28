@@ -9,14 +9,19 @@ on:
 
 permissions: {}
 
+concurrency:
+  # Intent: scheduled jobs stomp on each other, but manual runs are mostly independent.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.triggering_actor }}
+  cancel-in-progress: true
+
 jobs:
   check_versions:
     name: Update
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write
-      pull-requests: write
+      contents: write        # we create a branch with updated code, for review
+      pull-requests: write   # we create a PR
 
     steps:
       - name: Checkout code

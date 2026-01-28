@@ -20,6 +20,11 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  # Intent: scheduled jobs stomp on each other unless there's a push, but pushes only stomp if unchanged
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build:
     permissions:

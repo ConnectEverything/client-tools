@@ -26,6 +26,11 @@ permissions:
   #
   contents: read
 
+concurrency:
+  # Intent: scheduled jobs stomp on each other, but manual runs are mostly independent.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.triggering_actor }}
+  cancel-in-progress: true
+
 jobs:
   nightly_release:
     name: build
