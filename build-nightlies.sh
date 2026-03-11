@@ -265,7 +265,7 @@ extract_signing_keys() {
   # maintenance constraint, where one mistake could upload.
   # So we make sure that the private keys dir is outside the upload area.
   SIGNING_KEYS_DIR="$start_cwd/private-keys"
-  mkdir -m 0700 "$SIGNING_KEYS_DIR"
+  [[ -d "$SIGNING_KEYS_DIR" ]] || mkdir -m 0700 "$SIGNING_KEYS_DIR"
   cp "$start_cwd"/public-keys/* "$SIGNING_KEYS_DIR/./"
   touch       "$SIGNING_KEYS_DIR/nightlies-ssh-signing" "$SIGNING_KEYS_DIR/nightlies-cosign.key"
   chmod 0600  "$SIGNING_KEYS_DIR/nightlies-ssh-signing" "$SIGNING_KEYS_DIR/nightlies-cosign.key"
@@ -286,7 +286,22 @@ remove_signing_keys() {
 sign_artifact_cosign() {
   local artifact="${1:?}"
   extract_signing_keys
-  cosign sign-blob --yes --key "$SIGNING_KEYS_DIR/nightlies-cosign.key" --output-signature "${artifact}.cosign.sig" "$artifact"
+  # 2026-03-11:
+  # We now need --new-bundle-format=false to continue to get the signatures we expect.
+  # Also --use-signing-config=false.
+  # If we migrate away from that, we should move to keyless signatures via attestations in public audit logs instead.
+  # (Which cosign supports, and championed).
+  # `--new-bundle-format=false` was introduced in v2.6.0 and became default in v3.
+  # As of now, my laptop has cosign v3.0.5 and GitHub in an Action run defaulted to that version but the installer led to selecting v3.0.3 instead.
+  #
+  # See also <https://github.com/sigstore/cosign/security/advisories/GHSA-whqx-f9j3-ch6m>
+  # and note that because we're using a static key, manually distributed, the
+  # advisory does not apply to us.
+  cosign sign-blob --yes \
+    --new-bundle-format=false --use-signing-config=false \
+    --key "$SIGNING_KEYS_DIR/nightlies-cosign.key" \
+    --output-signature "${artifact}.cosign.sig" \
+    "$artifact"
 }
 
 sign_artifact_ssh() {
