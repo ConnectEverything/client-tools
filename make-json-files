@@ -1,178 +1,291 @@
-#!/usr/bin/env bash
-set -euo pipefail
+#!/usr/bin/env python3
+"""Convert synadia-nats-channels.conf into JSON files for site deployment.
 
-# This is invoked as part of the site deployment, whenever stable channel
-# versions are bumped, and converts synadia-nats-channels.conf into other files
-# in JSON format.
-# The .sh installer is not allowed to rely upon JSON handling being available,
-# and the core config supports that, but other installers should get something
-# saner.
-#
-# This script was written in bash, because as a superset of POSIX sh it let me
-# copy/paste the config extraction and templating functions I'd written and quickly
-# massage data with jq.  But any shell is not an ideal choice and this script is
-# a candidate for being rewritten to another language.  The initial development
-# expediency has given us something which runs "within a couple of seconds"
-# (instead of milliseconds) but which requires comfort with sh+jq which might
-# become a maintenance headache for others.
+Replaces the shell+jq implementation with a pure Python 3.13 stdlib solution.
+Invoked as part of site deployment whenever stable channel versions are bumped.
 
-progname="$(basename "$0" .sh)"
-note() { printf >&2 '%s: %s\n' "$progname" "$*"; }
-die() { note "$@"; exit 1; }
+This is for files available for the client installers running on machines,
+where we are distributing those installers here.
+The .sh installer is not allowed to rely upon JSON handling being available,
+and the core config supports that, but other installers should get something
+saner.  We support whatever JSON formats an installer tool wants or needs.
 
-readonly DEPLOY_DIR="${1:-public}"
-readonly SH_CHANNELS_FILE=synadia-nats-channels.conf
-readonly NIGHTLY_DATE_URL='https://get-nats.io/current-nightly'
+Usage: make-json-files [deploy_dir]   (default: public)
+"""
 
-# These are the two files we make.
-# The first is a straight reformatting of the .conf to JSON, still requiring expansion.
-# The second is a system keyed by platform.
-readonly OUT_CHANNELS="$DEPLOY_DIR/synadia-nats-channels.json"
-readonly OUT_PLATFORMS="$DEPLOY_DIR/synadia-nats-platforms.json"
+import json
+import re
+import sys
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Final
 
-readonly -a SUPPORTED_PLATFORMS=(
-      darwin-amd64
-      darwin-arm64
-      freebsd-amd64
-      linux-386
-      linux-amd64
-      linux-arm64
-      linux-arm6
-      linux-arm7
-      windows-386
-      windows-amd64
-      windows-arm64
-      windows-arm6
-      windows-arm7
-)
-readonly -A PLATFORM_EXE_EXTENSION=(
-      [windows-arm6]='exe'
-      [windows-arm64]='exe'
+# ── Constants ─────────────────────────────────────────────────────────────────
+
+NIGHTLY_DATE_URL: Final = "https://get-nats.io/current-nightly"
+SH_CHANNELS_FILE: Final = "synadia-nats-channels.conf"
+
+SUPPORTED_PLATFORMS: Final[tuple[str, ...]] = (
+    "darwin-amd64",
+    "darwin-arm64",
+    "freebsd-amd64",
+    "linux-386",
+    "linux-amd64",
+    "linux-arm64",
+    "linux-arm6",
+    "linux-arm7",
+    "windows-386",
+    "windows-amd64",
+    "windows-arm64",
+    "windows-arm6",
+    "windows-arm7",
 )
 
-# --------------------------8< End of Config >8---------------------------
-
-# Defining this lets us use grab_channelfile_line unmodified from install.sh
-chanfile="$SH_CHANNELS_FILE"
-chan_origin="$SH_CHANNELS_FILE"
-
-command -v jq >/dev/null || die "missing command: jq"
-
-# From: install.sh {{{
-
-grab_channelfile_line() {
-  local varname="${1:?need a file to get from the channel file}"
-  local t
-  # sed -E is not POSIX, so we're on BREs only
-  t="$(sed -n "s/${varname}[[:space:]]*=[[:space:]]*//p" < "${chanfile:?bug, chanfile not in calling context}")"
-  if [ -n "$t" ]; then
-    printf '%s\n' "$t"
-  else
-    die "missing '${varname}' in ${chan_origin:?}"
-  fi
+# Matches the shell script's PLATFORM_EXE_EXTENSION associative array exactly.
+# Only these two platforms get an .exe suffix; the others do not.
+PLATFORM_EXE_EXTENSION: Final[dict[str, str]] = {
+    "windows-arm6": "exe",
+    "windows-arm64": "exe",
 }
 
-expand_config_value() {
-  local val="$1"
-  local subst="$2"
-  local replace="$3"
-  local result=""
-  while [ "$val" != "${val#*\%${subst}\%}" ]; do
-    pre="${val%%\%${subst}\%*}"
-    post="${val#*\%${subst}\%}"
-    result="${result}${pre}${replace}"
-    val="$post"
-  done
-  result="${result}${val}"
-  printf '%s\n' "$result"
-}
+# ── Config file parsing ────────────────────────────────────────────────────────
 
-# From: install.sh }}}
+# This is for the shell-compatible assignments file synadia-nats-channels.conf
+_KEY_VALUE_RE: Final = re.compile(r"^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)")
 
-expand_all() {
-  local val="$1"
-  shift
-  local tag lhs rhs
-  for tag; do
-    lhs="${tag%%:*}"
-    rhs="${tag#*:}"
-    val="$(expand_config_value "$val" "$lhs" "$rhs")"
-  done
-  printf '%s\n' "$val"
-}
 
-declare -a all_channels=() all_tools=() expansions=() platform_expands=() tool_jq=()
+def parse_conf(path: Path) -> dict[str, str]:
+    """Parse a shell-style key=value config file.
 
-note "Building data (slowly, can be rewritten to Python to be faster)"
+    Skips blank lines and lines whose first non-whitespace character is '#'.
+    Values are stripped of leading/trailing whitespace.
+    """
+    conf: dict[str, str] = {}
+    for line in path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        m = _KEY_VALUE_RE.match(stripped)
+        if m:
+            conf[m.group(1)] = m.group(2).strip()
+    return conf
 
-all_channels+=($(grab_channelfile_line CHANNELS))
-all_tools+=($(grab_channelfile_line TOOLS))
 
-# jchdata goes into synadia-nats-channels.json
-jchdata='{}'
-# jplatformdata goes into synadia-nats-platforms.json
-jplatformdata='{}'
+def _require(conf: dict[str, str], key: str, source: str) -> str:
+    """Return conf[key], raising ValueError with a clear message if absent."""
+    try:
+        return conf[key]
+    except KeyError:
+        raise ValueError(f"missing '{key}' in {source}") from None
 
-for channel in "${all_channels[@]}"; do
-  jchannel='{}'
-  case "$channel" in
-    nightly)
-      jchannel="$(jq <<<"$jchannel" --arg U "$NIGHTLY_DATE_URL" '.version_url = $U')"
-      ;;
-  esac
-  jexpanded_channel="$(jq <<<"$jchannel" --arg C "$channel" '.platforms = {}')"
 
-  for tool in "${all_tools[@]}"; do
-    suffix="${channel}_${tool}"
-    version='' zipfile='' checksumfile='' urldir='' executable='' jtool='' tool_object=''
+# ── Template expansion ─────────────────────────────────────────────────────────
 
-    zipfile="$(grab_channelfile_line "ZIPFILE_${suffix}")"
-    checksumfile="$(grab_channelfile_line "CHECKSUMS_${suffix}")"
-    urldir="$(grab_channelfile_line "URLDIR_${suffix}")"
-    jtool="$(jq -nr --arg Z "$zipfile" --arg C "$checksumfile" --arg U "$urldir" '.zipfile = $Z | .checksumfile = $C | .urldir = $U')"
+def expand(template: str, substitutions: dict[str, str]) -> str:
+    """Replace ``%KEY%`` placeholders using *substitutions*, applied sequentially.
 
-    # Directives used to invoke expand_all:
-    expansions=( "TOOLNAME:$tool" "ZIPFILE:$zipfile" "CHECKFILE:$checksumfile")
-    # See jexpanded_channel below in the platform loop (for synadia-nats-platforms.json):
-    tool_jq=( --arg T "$tool" )
-    tool_object='executable: $E, zip_url: $Z, checksum_url: $C'
+    Replicates the shell script's ``expand_config_value`` / ``expand_all`` logic:
+    substitutions are applied one at a time in iteration order, so a replacement
+    value may itself contain a placeholder resolved by a later substitution.
+    """
+    result = template
+    for key, value in substitutions.items():
+        result = result.replace(f"%{key}%", value)
+    return result
 
-    case "$channel" in
-      nightly)
-        expansions+=( "VERSIONTAG:%NIGHTLY%" "VERSIONNOV:%NIGHTLY%" )
-        ;;
-      *)
-        version="$(grab_channelfile_line "VERSION_${suffix}")"
-        jtool="$(jq <<<"$jtool" --arg V "$version" '.version = $V')"
-        expansions+=( "VERSIONTAG:$version" "VERSIONNOV:${version#v}" )
-        tool_jq+=( --arg VT "$version" --arg VB "${version#v}" )
-        tool_object="${tool_object}"', version_tag: $VT, version_bare: $VB'
-        ;;
-    esac
 
-    jchannel="$(jq <<<"$jchannel" --arg T "$tool" --argjson P "$jtool" '.[$T] = $P')"
+# ── Data model ─────────────────────────────────────────────────────────────────
 
-    for platform in "${SUPPORTED_PLATFORMS[@]}"; do
-      executable="$tool${PLATFORM_EXE_EXTENSION[$platform]:+.}${PLATFORM_EXE_EXTENSION[$platform]:-}"
-      jexpanded_channel="$(jq <<<"$jexpanded_channel" --arg P "$platform" '.platforms[$P] //= {tools: {}}')"
-      platform_expands=( "${expansions[@]}" "OSNAME:${platform%%-*}" "GOARCH:${platform#*-}" )
+@dataclass(frozen=True)
+class ToolTemplates:
+    """Raw (unexpanded) template strings for one tool within one channel."""
 
-      zip_url="$(expand_all "${urldir}${zipfile}" "${platform_expands[@]}")"
-      chk_url="$(expand_all "${urldir}${checksumfile}" "${platform_expands[@]}")"
-      jexpanded_channel="$(jq <<<"$jexpanded_channel" \
-        "${tool_jq[@]}" --arg P "$platform" --arg Z "$zip_url" --arg C "$chk_url" --arg E "$executable" \
-        '.platforms[$P].tools[$T] = '"{ $tool_object }")"
-    done
+    zipfile: str
+    checksumfile: str
+    urldir: str
+    version: str | None  # None for the nightly channel
 
-  done
 
-  jchdata="$(jq <<<"$jchdata" --arg C "$channel" --argjson P "$jchannel" '.[$C] = $P')"
-  jplatformdata="$(jq <<<"$jplatformdata" --arg C "$channel" --argjson P "$jexpanded_channel" '.[$C] = $P')"
-done
+@dataclass(frozen=True)
+class ChannelSpec:
+    """All configuration for a single release channel."""
 
-[[ -d "$DEPLOY_DIR" ]] || mkdir -pv -- "$DEPLOY_DIR"
-note "Writing: $OUT_CHANNELS"
-printf '%s\n' > "$OUT_CHANNELS" "$jchdata"
-note "Writing: $OUT_PLATFORMS"
-printf '%s\n' > "$OUT_PLATFORMS" "$jplatformdata"
+    name: str
+    tools: dict[str, ToolTemplates]
+    version_url: str | None  # populated only for the nightly channel
 
+
+# ── Loading ────────────────────────────────────────────────────────────────────
+
+def load_channel(
+    conf: dict[str, str],
+    channel: str,
+    tools: list[str],
+    source: str,
+) -> ChannelSpec:
+    is_nightly = channel == "nightly"
+    version_url = NIGHTLY_DATE_URL if is_nightly else None
+
+    tool_templates: dict[str, ToolTemplates] = {}
+    for tool in tools:
+        suffix = f"{channel}_{tool}"
+        tool_templates[tool] = ToolTemplates(
+            zipfile=_require(conf, f"ZIPFILE_{suffix}", source),
+            checksumfile=_require(conf, f"CHECKSUMS_{suffix}", source),
+            urldir=_require(conf, f"URLDIR_{suffix}", source),
+            version=None if is_nightly else _require(conf, f"VERSION_{suffix}", source),
+        )
+
+    return ChannelSpec(name=channel, tools=tool_templates, version_url=version_url)
+
+
+# ── JSON builders ──────────────────────────────────────────────────────────────
+
+def build_channels_json(channels: list[ChannelSpec]) -> dict:
+    """Build the structure for ``synadia-nats-channels.json``.
+
+    Top-level keys are channel names.  Each channel object holds the raw
+    (unexpanded) template strings for every tool, plus ``version_url`` for the
+    nightly channel.
+    """
+    result: dict = {}
+    for ch in channels:
+        channel_obj: dict = {}
+        if ch.version_url is not None:
+            channel_obj["version_url"] = ch.version_url
+        for tool_name, tmpl in ch.tools.items():
+            tool_obj: dict = {
+                "zipfile": tmpl.zipfile,
+                "checksumfile": tmpl.checksumfile,
+                "urldir": tmpl.urldir,
+            }
+            if tmpl.version is not None:
+                tool_obj["version"] = tmpl.version
+            channel_obj[tool_name] = tool_obj
+        result[ch.name] = channel_obj
+    return result
+
+
+def build_platforms_json(channels: list[ChannelSpec]) -> dict:
+    """Build the structure for ``synadia-nats-platforms.json``.
+
+    Top-level keys are channel names.  Each channel object contains a
+    ``platforms`` dict keyed by platform string, whose values hold a ``tools``
+    dict with fully-expanded URLs and executable names for that platform.
+    """
+    result: dict = {}
+    for ch in channels:
+        is_nightly = ch.name == "nightly"
+
+        channel_obj: dict = {}
+        if ch.version_url is not None:
+            channel_obj["version_url"] = ch.version_url
+        platforms_obj: dict = {}
+        channel_obj["platforms"] = platforms_obj
+
+        # Outer loop: tools; inner loop: platforms.
+        # This matches the shell script's loop order, which determines the
+        # insertion order of keys within each platform's "tools" dict.
+        for tool_name, tmpl in ch.tools.items():
+            # Base substitutions available at channel+tool scope.
+            base_subs: dict[str, str] = {
+                "TOOLNAME": tool_name,
+                "ZIPFILE": tmpl.zipfile,
+                "CHECKFILE": tmpl.checksumfile,
+            }
+            if is_nightly:
+                # For nightly, version placeholders are left as %NIGHTLY% so
+                # the installer can substitute the date it fetches at runtime.
+                base_subs["VERSIONTAG"] = "%NIGHTLY%"
+                base_subs["VERSIONNOV"] = "%NIGHTLY%"
+            else:
+                assert tmpl.version is not None
+                base_subs["VERSIONTAG"] = tmpl.version
+                base_subs["VERSIONNOV"] = tmpl.version.lstrip("v")
+
+            for platform in SUPPORTED_PLATFORMS:
+                os_name, _, arch = platform.partition("-")
+
+                # Platform-level substitutions extend the base set; order
+                # matches the shell script's platform_expands array.
+                subs = dict(base_subs)
+                subs["OSNAME"] = os_name
+                subs["GOARCH"] = arch
+
+                zip_url = expand(tmpl.urldir + tmpl.zipfile, subs)
+                chk_url = expand(tmpl.urldir + tmpl.checksumfile, subs)
+
+                ext = PLATFORM_EXE_EXTENSION.get(platform, "")
+                executable = f"{tool_name}.{ext}" if ext else tool_name
+
+                # Initialise platform entry on first visit (//= semantics).
+                if platform not in platforms_obj:
+                    platforms_obj[platform] = {"tools": {}}
+
+                tool_entry: dict = {
+                    "executable": executable,
+                    "zip_url": zip_url,
+                    "checksum_url": chk_url,
+                }
+                if not is_nightly:
+                    tool_entry["version_tag"] = tmpl.version  # type: ignore[assignment]
+                    tool_entry["version_bare"] = tmpl.version.lstrip("v")  # type: ignore[union-attr]
+
+                platforms_obj[platform]["tools"][tool_name] = tool_entry
+
+        result[ch.name] = channel_obj
+    return result
+
+
+# ── Main ───────────────────────────────────────────────────────────────────────
+
+def _note(msg: str) -> None:
+    print(f"make-json-files.py: {msg}", file=sys.stderr)
+
+
+def main(argv: list[str]) -> int:
+    deploy_dir = Path(argv[1]) if len(argv) > 1 else Path("public")
+    conf_path = Path(SH_CHANNELS_FILE)
+
+    out_channels = deploy_dir / "synadia-nats-channels.json"
+    out_platforms = deploy_dir / "synadia-nats-platforms.json"
+
+    if not conf_path.exists():
+        _note(f"cannot read {conf_path}")
+        return 1
+
+    try:
+        conf = parse_conf(conf_path)
+
+        channels_raw = _require(conf, "CHANNELS", SH_CHANNELS_FILE).split()
+        tools_raw = _require(conf, "TOOLS", SH_CHANNELS_FILE).split()
+
+        if not channels_raw:
+            raise ValueError("CHANNELS list is empty")
+        if not tools_raw:
+            raise ValueError("TOOLS list is empty")
+
+        channels = [
+            load_channel(conf, ch, tools_raw, SH_CHANNELS_FILE)
+            for ch in channels_raw
+        ]
+    except ValueError as exc:
+        _note(str(exc))
+        return 1
+
+    channels_data = build_channels_json(channels)
+    platforms_data = build_platforms_json(channels)
+
+    deploy_dir.mkdir(parents=True, exist_ok=True)
+
+    _note(f"Writing: {out_channels}")
+    out_channels.write_text(json.dumps(channels_data, indent=2) + "\n", encoding="utf-8")
+
+    _note(f"Writing: {out_platforms}")
+    out_platforms.write_text(json.dumps(platforms_data, indent=2) + "\n", encoding="utf-8")
+
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))
