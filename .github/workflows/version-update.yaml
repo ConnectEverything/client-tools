@@ -123,4 +123,7 @@ jobs:
           branch: auto/update-tool-versions
           base: main
           delete-branch: true
-          reviewers: ConnectEverything/Dev
+          reviewers: |-2
+            philpennock
+            ripienaar
+            aricart
