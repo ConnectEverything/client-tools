@@ -20,8 +20,8 @@ jobs:
     runs-on: ubuntu-latest
 
     permissions:
-      contents: write        # we create a branch with updated code, for review
-      pull-requests: write   # we create a PR
+      contents: write        # we create a branch with updated code, for review; also needed for setting PR to auto-merge
+      pull-requests: write   # we create a PR; also set it to auto-merge
 
     steps:
       - name: Checkout code
@@ -99,6 +99,7 @@ jobs:
 
       - name: Create Pull Request
         if: steps.update_versions.outputs.updated == 'true'
+        id: create_pr
         uses: peter-evans/create-pull-request@c0f553fe549906ede9cf27b5156039d195d2ece0 # v8.1.0
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -106,7 +107,7 @@ jobs:
           commit-message: |
             ${{ fromJSON(steps.update_versions.outputs.commit).message }}
 
-          title: "Update NATS tool versions: ${{ steps.update_versions.outputs.which_updated }}"
+          title: "Update NATS tool versions: ${{ steps.update_versions.outputs.which_tools }}"
           body: |
             This PR updates the NATS tool versions in `synadia-nats-channels.conf` to the latest stable releases:
 
@@ -122,8 +123,18 @@ jobs:
 
           branch: auto/update-tool-versions
           base: main
+          sign-commits: true  # causes 'author:' and 'committer:' to be ignored
           delete-branch: true
           reviewers: |-2
             philpennock
             ripienaar
             aricart
+
+      - name: Set Pull Request to Auto-Merge
+        if: steps.update_versions.outputs.updated == 'true'
+        id: auto_merge
+        env:
+          PR_NUM: ${{ steps.create_pr.outputs.pull-request-number }}
+        run: gh pr merge --merge --auto "$PR_NUM"
+
+# EOF
