@@ -138,22 +138,29 @@ The nightly assets, and a bit more, live in a KV Namespace bound into our
 
 You will need the Wrangler CLI tool, and credentials.  For credentials, you
 can use a token as Phil setup (see the README) or just give Wrangler your
-account credentials.
+account credentials.  Wrangler is now an npm tool (it is pinned as a dev
+dependency of `nightlies-serving`, so `npm install` there provides it).
 
 ```sh
-cargo install wrangler
-wrangler login
+cd nightlies-serving
+npm install
+npx wrangler login
 ```
 
 Then to deploy the site:
 
 ```sh
 cd nightlies-serving
-wrangler publish
+npm run deploy   # wraps `wrangler deploy`
 ```
 
-The site is small enough and the end-points well-enough defined that we could
-consider switching to a language which compiles down to WASM if we want.
+The worker is a single dependency-free ES module (`src/worker.js`) with no
+build step; Wrangler uploads it directly.  It was previously a TypeScript +
+webpack + `itty-router` build, which added nothing to the ~40 lines of edge
+code but was a constant source of npm audit churn.  Compiling a WASM language
+(e.g. Go via TinyGo) was evaluated and rejected: Workers have no native Go
+runtime, so it needs a third-party bridge and a build step — a heavier
+toolchain, not a lighter one.  See `nightlies-serving/README.md`.
 
 
 ## get-nats.io overview

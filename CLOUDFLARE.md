@@ -105,11 +105,29 @@ expected usage in TB, we're _probably_ not using that, but I've scoped my
 development to be able to access that just in case.
 
 
-There doesn't appear to be a fixed standard for what the environment variable
-should be called; the CF `wrangler` tool just writes it into
-`~/.wrangler/config/default.toml`.  The two common names found in searching
-are `CF_API_KEY` and `CLOUDFLARE_AUTH_TOKEN`.  I've gone with
-`$CLOUDFLARE_AUTH_TOKEN` for the nightlies script.
+**Prefer passing the token through an environment variable, sourced from a
+secrets manager, over leaving credentials on disk.**  The current npm-based
+`wrangler` reads its token from `CLOUDFLARE_API_TOKEN` (and, optionally, the
+account from `CLOUDFLARE_ACCOUNT_ID`); the older `CF_API_TOKEN` /
+`CLOUDFLARE_AUTH_TOKEN` names are also seen in the wild.  The nightly upload
+script reads `$CLOUDFLARE_AUTH_TOKEN`, so when driving Wrangler by hand, export
+the same secret under `CLOUDFLARE_API_TOKEN` as well (or alias one to the
+other).
+
+Feed these from wherever you keep secrets rather than committing or hand-editing
+config files:
+
+ * Locally, this repo already loads env vars via `direnv` from
+   `.credentials.env` (which is git-ignored) — put the token there, or, better,
+   have direnv fetch it on demand from a real secrets manager (1Password `op`,
+   `pass`, Vault, etc.) so the plaintext never lands in a dotfile.
+ * In CI, GitHub Actions injects it from the repository secret
+   `CLOUDFLARE_AUTH_TOKEN` (see below); nothing is persisted to the runner.
+
+Avoid `wrangler login`: its OAuth flow writes long-lived credentials to
+`~/.config/.wrangler/` (older Wrangler used `~/.wrangler/config/default.toml`).
+If you do use it, treat that file as a secret and prefer a short-lived, tightly
+scoped token instead.
 
 
 A second token with the exact same scopes has been created, and given the name:
@@ -208,20 +226,33 @@ I added a route:
 
 At this point, <https://get-nats.io/nightly/current> works.
 
-Then in this repo:
+Then in this repo the worker area was originally bootstrapped from the
+CloudFlare TypeScript template:
 
 ```sh
 wrangler generate nightlies-serving \
   https://github.com/cloudflare/worker-typescript-template
 ```
 
-and then we work on the worker within that area.
+That template brought in a node/webpack/TypeScript/`itty-router`/jest stack.
+It added nothing to the ~40 lines of edge code but was a constant source of
+npm audit churn and eventually developed irreconcilable upstream version
+conflicts, so it was **removed**.  (Compiling a WASM language such as Go via
+TinyGo was evaluated as an alternative and rejected: Workers have no native Go
+runtime, so it needs a third-party bridge plus a build step — a heavier
+toolchain, not a lighter one.)
 
 The end result, self-contained within the `nightlies-serving/` directory here,
-is a node/webpack typescript HTTP handler which can be deployed with
-`wrangler publish`.  That will build a service-worker, upload it, and make
-sure the routes are correct.
+is now a single dependency-free ES-module worker, `nightlies-serving/src/worker.js`,
+which just front-ends HTTP requests onto the KV store.  There is no build step;
+Wrangler uploads the one file directly.  Deploy it with:
 
-The code in `nightlies-serving/src/handler.ts` pretty much just front-ends
-HTTP requests onto the KV store.
+```sh
+cd nightlies-serving
+npm install       # provides the pinned wrangler (an npm tool now, not cargo)
+npm run deploy    # wraps `wrangler deploy`, which also syncs the routes
+```
+
+`npm test` runs a vitest smoke suite against the real workerd runtime.  See
+`nightlies-serving/README.md` for the full development workflow.
 

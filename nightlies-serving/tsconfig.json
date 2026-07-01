@@ -1,21 +1,16 @@
 {
   "compilerOptions": {
-    "outDir": "./dist",
-    "module": "commonjs",
     "target": "esnext",
+    "module": "esnext",
+    "moduleResolution": "bundler",
     "lib": ["esnext"],
-    "alwaysStrict": true,
+    "types": ["@cloudflare/workers-types"],
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
     "strict": true,
-    "preserveConstEnums": true,
-    "moduleResolution": "node",
-    "sourceMap": true,
-    "esModuleInterop": true,
-    "types": [
-      "@cloudflare/workers-types",
-      "@types/jest",
-      "@types/service-worker-mock"
-    ]
+    "skipLibCheck": true
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist", "test"]
+  "include": ["src", "test", "vitest.config.js"],
+  "exclude": ["node_modules"]
 }
