@@ -45,6 +45,21 @@ npm run deploy    # wrangler deploy
 There is no build/bundle step: `wrangler` uploads `src/worker.js` directly (see
 `main` in [`wrangler.toml`](./wrangler.toml)).
 
+### Live Testing
+
+You can upload the local code to CloudFlare as a temporary instance and have
+the local server proxy to that instance, letting you test with the real KV
+assets.
+
+Run:
+
+```sh
+npx wrangler dev --remote
+```
+
+You can then test fetching <http://localhost:8787/current-nightly>.
+(Beware that the root page redirects to Synadia's public website).
+
 ## License
 
 MIT OR Apache-2.0. See `LICENSE_MIT` and `LICENSE_APACHE`.
