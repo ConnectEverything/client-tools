@@ -1,39 +1,65 @@
-# ʕ •́؈•̀) `worker-typescript-template`
+# nightlies-serving
 
-A batteries included template for kick starting a TypeScript Cloudflare worker project.
+A Cloudflare Worker that serves the nats.io nightly build assets out of a
+Workers KV namespace, behind `get-nats.io`.
 
-## Note: You must use [wrangler](https://developers.cloudflare.com/workers/cli-wrangler/install-update) 1.17 or newer to use this template.
+## Design
 
-## 🔋 Getting Started
+Deliberately minimal and **dependency-free at runtime**. The worker is a single
+hand-written ES module, [`src/worker.js`](./src/worker.js), with no router
+library and no bundler:
 
-This template is meant to be used with [Wrangler](https://github.com/cloudflare/wrangler). If you are not already familiar with the tool, we recommend that you install the tool and configure it to work with your [Cloudflare account](https://dash.cloudflare.com). Documentation can be found [here](https://developers.cloudflare.com/workers/tooling/wrangler/).
+- `GET|HEAD /current-nightly` → returns the `CURRENT` key from the KV namespace.
+- `GET /nightly/:id` → streams the named asset back, with a `Content-Type`
+  guessed from the file extension.
+- everything else → `404`.
 
-To generate using Wrangler, run this command:
+This replaced an earlier TypeScript setup (webpack + `ts-loader` + `itty-router`
++ jest + `service-worker-mock` + eslint). That toolchain contributed nothing to
+the ~40 lines of edge code but was a perpetual source of npm audit churn and
+eventually developed irreconcilable version conflicts. There is now **zero**
+runtime dependency; the only npm packages are dev tooling (wrangler, vitest),
+none of which ships to the edge.
+
+### Why not Go / WASM?
+
+Cloudflare Workers run JS/WASM on V8 isolates. Go's stdlib knows nothing about
+the Workers `fetch` event or KV bindings, so a Go worker requires TinyGo plus a
+third-party bridge (`syumai/workers`) and still has a build step — trading npm
+churn for a heavier toolchain, for 40 lines of glue. Not worth it. Plain JS with
+no build step is the simpler, smaller target.
+
+## Development
+
+Requires Node (for the tooling) and a Cloudflare account for deploys.
 
 ```bash
-wrangler generate my-ts-project https://github.com/cloudflare/worker-typescript-template
+npm install
+npm test          # vitest, runs against the real workerd runtime via
+                  # @cloudflare/vitest-pool-workers, with an in-memory KV
+npm run typecheck # tsc --noEmit over the JSDoc-annotated JS (checkJs)
+npm run dev       # wrangler dev, local preview
+npm run deploy    # wrangler deploy
 ```
 
-### 👩 💻 Developing
+There is no build/bundle step: `wrangler` uploads `src/worker.js` directly (see
+`main` in [`wrangler.toml`](./wrangler.toml)).
 
-[`src/index.ts`](./src/index.ts) calls the request handler in [`src/handler.ts`](./src/handler.ts), and will return the [request method](https://developer.mozilla.org/en-US/docs/Web/API/Request/method) for the given request.
+### Live Testing
 
-### 🧪 Testing
+You can upload the local code to CloudFlare as a temporary instance and have
+the local server proxy to that instance, letting you test with the real KV
+assets.
 
-This template comes with jest tests which simply test that the request handler can handle each request method. `npm test` will run your tests.
+Run:
 
-### ✏️ Formatting
+```sh
+npx wrangler dev --remote
+```
 
-This template uses [`prettier`](https://prettier.io/) to format the project. To invoke, run `npm run format`.
+You can then test fetching <http://localhost:8787/current-nightly>.
+(Beware that the root page redirects to Synadia's public website).
 
-### 👀 Previewing and Publishing
+## License
 
-For information on how to preview and publish your worker, please see the [Wrangler docs](https://developers.cloudflare.com/workers/tooling/wrangler/commands/#publish).
-
-## 🤢 Issues
-
-If you run into issues with this specific project, please feel free to file an issue [here](https://github.com/cloudflare/worker-typescript-template/issues). If the problem is with Wrangler, please file an issue [here](https://github.com/cloudflare/wrangler/issues).
-
-## ⚠️ Caveats
-
-The `service-worker-mock` used by the tests is not a perfect representation of the Cloudflare Workers runtime. It is a general approximation. We recommend that you test end to end with `wrangler dev` in addition to a [staging environment](https://developers.cloudflare.com/workers/tooling/wrangler/configuration/environments/) to test things before deploying.
+MIT OR Apache-2.0. See `LICENSE_MIT` and `LICENSE_APACHE`.

@@ -1,24 +1,17 @@
 name = "nightlies-serving"
-type = "javascript"
-zone_id = "4b53c2442ec2650d13753d68bc90ffd7"
+main = "src/worker.js"
+compatibility_date = "2024-09-23"
 account_id = "32578e55e8e251552382924d4855e414"
 workers_dev = true
-compatibility_date = "2022-02-03"
-# We include some settings here outside the envs, because we only have one
+
+# Single worker, no separate envs; a single-file ES module needs no build step,
+# so wrangler uploads src/worker.js directly (no webpack/esbuild config).
+# Zone is now specified per-route (wrangler 4 dropped the top-level zone_id).
 routes = [
-  "get-nats.io/nightly/*",
-  "get-nats.io/current-nightly",
+  { pattern = "get-nats.io/nightly/*", zone_id = "4b53c2442ec2650d13753d68bc90ffd7" },
+  { pattern = "get-nats.io/current-nightly", zone_id = "4b53c2442ec2650d13753d68bc90ffd7" },
 ]
+
 kv_namespaces = [
   { binding = "ASSETS", id = "eb4407c72ba74904b9602a60813a42ee" }
 ]
-
-# If we include [env.production] then it seems a new worker, with the env in the name, gets created
-# We end up with `nightlies-serving` as worker with env production and `nightlies-serving-production` with env production.
-# Hum.
-
-[build]
-command = "npm install && npm run build"
-
-[build.upload]
-format = "service-worker"
