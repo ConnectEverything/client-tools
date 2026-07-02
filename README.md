@@ -144,7 +144,8 @@ dependency of `nightlies-serving`, so `npm install` there provides it).
 ```sh
 cd nightlies-serving
 npm install
-npx wrangler login
+# Prefer token auth; see CLOUDFLARE.md (CLOUDFLARE_API_TOKEN / CLOUDFLARE_ACCOUNT_ID)
+npx wrangler whoami
 ```
 
 Then to deploy the site:

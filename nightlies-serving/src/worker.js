@@ -81,7 +81,13 @@ export default {
     if (request.method === 'GET') {
       const match = pathname.match(/^\/nightly\/([^/]+)$/)
       if (match) {
-        return nightlyAsset(decodeURIComponent(match[1]), env.ASSETS)
+        let assetId
+        try {
+          assetId = decodeURIComponent(match[1])
+        } catch {
+          return new Response('Not found\n', { status: 404 })
+        }
+        return nightlyAsset(assetId, env.ASSETS)
       }
     }
 

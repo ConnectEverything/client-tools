@@ -43,11 +43,11 @@ describe('nightlies worker', () => {
   })
 
   it('serves a nightly asset with a content-type derived from the name', async () => {
-    await env.ASSETS.put('nats-server.zip', 'PK pretend zip')
+    await env.ASSETS.put('nats-server.zip', 'PK\u0003\u0004 pretend zip')
     const res = await call('/nightly/nats-server.zip')
     expect(res.status).toBe(200)
     expect(res.headers.get('Content-Type')).toBe('application/zip')
-    expect(await res.text()).toBe('PK pretend zip')
+    expect(await res.text()).toBe('PK\u0003\u0004 pretend zip')
   })
 
   it('404s an unknown asset', async () => {
