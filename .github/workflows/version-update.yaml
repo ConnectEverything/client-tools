@@ -135,6 +135,7 @@ jobs:
         id: auto_merge
         env:
           PR_NUM: ${{ steps.create_pr.outputs.pull-request-number }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh pr merge --merge --auto "$PR_NUM"
 
 # EOF
