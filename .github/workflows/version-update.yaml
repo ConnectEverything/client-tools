@@ -130,12 +130,17 @@ jobs:
             ripienaar
             aricart
 
-      - name: Set Pull Request to Auto-Merge
-        if: steps.update_versions.outputs.updated == 'true'
-        id: auto_merge
-        env:
-          PR_NUM: ${{ steps.create_pr.outputs.pull-request-number }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh pr merge --merge --auto "$PR_NUM"
+      #- name: Set Pull Request to Auto-Merge
+      ## DISABLED: DOES NOT WORK
+      ## REASON: The github-actions GH user is not allowed to merge to main and enabling auto-merge must be done _by_ a user who _could_ do the merge themselves.
+      ##         A future workaround will be to have a dedicated App do the creation, which will also allow the PR creation workflows to be triggered automatically.
+      ##         We can then allow-list that app user for merge to main.
+      ##         In the meantime, keep this around so we can see what we tried to do, and as a nudge to try again in future.
+      #  if: steps.update_versions.outputs.updated == 'true'
+      #  id: auto_merge
+      #  env:
+      #    PR_NUM: ${{ steps.create_pr.outputs.pull-request-number }}
+      #    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #  run: gh pr merge --merge --auto "$PR_NUM"
 
 # EOF
