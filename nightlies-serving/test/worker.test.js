@@ -2,10 +2,10 @@
 // Copyright 2026 Phil Pennock
 //
 // Smoke tests running against the real workerd runtime via
-// @cloudflare/vitest-pool-workers, with an in-memory KV namespace seeded per
+// @cloudflare/vitest-plugin, with an in-memory KV namespace seeded per
 // test. This replaces the old jest + service-worker-mock suite.
 
-/// <reference types="@cloudflare/vitest-pool-workers" />
+/// <reference types="@cloudflare/vitest-plugin" />
 import { env, createExecutionContext, waitOnExecutionContext } from 'cloudflare:test'
 import { beforeEach, describe, expect, it } from 'vitest'
 import worker from '../src/worker.js'
